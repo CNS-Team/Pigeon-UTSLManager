@@ -4,12 +4,12 @@ namespace Pigeon.Manager;
 
 public sealed class Workspace {
     public string Root { get; }
-    public string Servers => Path.Combine(Root, "servers");
-    public string Library => Path.Combine(Root, "plugins");
-    public string Data => Path.Combine(Root, "data");
-    public string Backups => Path.Combine(Root, "backups");
-    public string Maps => Path.Combine(Root, "maps");
-    public string App => Path.Combine(Root, "app");
+    public string Servers => Path.Combine(Root, "Servers");
+    public string Library => Path.Combine(Root, "Plugins");
+    public string Data => Path.Combine(Root, "Data");
+    public string Backups => Path.Combine(Root, "Backups");
+    public string Maps => Path.Combine(Root, "Maps");
+    public string App => Path.Combine(Root, "App");
     public string Pipe => "PigeonUTSL_" + Hashes.RootId(Root);
     public Workspace(string root) {
         Root = Path.GetFullPath(root);
@@ -34,13 +34,22 @@ public sealed class Workspace {
         string full=Path.GetFullPath(existing);EnsureNoLinks(full);return full;
     }
     public string ServerExecutable(ServerProfile profile) => Under(ServerDirectory(profile), profile.Executable);
+    string NextFolder(string label) {
+        int next = 0;
+        foreach (string folder in Directory.EnumerateDirectories(Servers)) {
+            string prefix = Path.GetFileName(folder).Split('.')[0];
+            if (int.TryParse(prefix, out int number) && number >= next) next = checked(number + 1);
+        }
+        string safe = string.Concat(label.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        return next + "." + safe;
+    }
     public ServerProfile RegisterExisting(string source) {
         source=Path.TrimEndingDirectorySeparator(Path.GetFullPath(source));EnsureNoLinks(source);
         if(!File.Exists(Path.Combine(source,"UnifierTSL.exe")))throw new IOException("目录根部缺少 UnifierTSL.exe");
         if(Load().Any(p=>ServerDirectory(p).Equals(source,StringComparison.OrdinalIgnoreCase)))throw new IOException("该服务器目录已登记");
         if(source.Equals(Root,StringComparison.OrdinalIgnoreCase) || Root.StartsWith(source.TrimEnd('\\')+"\\",StringComparison.OrdinalIgnoreCase))throw new IOException("不能将管理器根目录或其父目录登记为服务器");
         string id=Guid.NewGuid().ToString("N");
-        var profile=new ServerProfile{Id=id,Name=Path.GetFileName(source.TrimEnd('\\')),Folder="existing-"+id[..8],ExistingDirectory=source};
+        var profile=new ServerProfile{Id=id,Name=Path.GetFileName(source.TrimEnd('\\')),Folder=NextFolder("Existing-"+Path.GetFileName(source)),ExistingDirectory=source};
         string reference=Under(Servers,profile.Folder);Directory.CreateDirectory(reference);
         Json.Save(Path.Combine(reference,"server-reference.json"),new{source,mode="EXPLICIT_EXISTING_DIRECTORY_NO_COPY_NO_START"});
         var list=Load();list.Add(profile);Save(list);Audit("register-existing-no-copy-no-start",id,new{source,reference});return profile;
@@ -61,7 +70,7 @@ public sealed class Workspace {
         Visit(source);
         string id = Guid.NewGuid().ToString("N");
         string label = Path.GetFileName(source.TrimEnd('\\'));
-        string folder = string.Concat(label.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) + "_" + id[..6];
+        string folder = NextFolder(label);
         string stage = Under(Servers, ".import-" + id); Directory.CreateDirectory(stage);
         try {
             foreach (var file in files) { string dest = Under(stage, file.Relative); Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Copy(file.Path, dest, false); }

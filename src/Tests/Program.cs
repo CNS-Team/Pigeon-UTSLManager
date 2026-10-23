@@ -8,7 +8,7 @@ var workspace = new Workspace(Path.Combine(output, "隔离管理器"));
 var results = new List<object>(); int passed = 0, failed = 0;
 void Check(string name, bool ok) { results.Add(new { name, pass = ok }); if (ok) passed++; else failed++; Console.WriteLine((ok ? "PASS " : "FAIL ") + name); }
 bool Reject(Action action) { try { action(); return false; } catch { return true; } }
-Check("root-layout", new[] { "plugins", "servers", "maps", "backups", "data" }.All(x => Directory.Exists(Path.Combine(workspace.Root, x))));
+Check("root-layout", new[] { "Plugins", "Servers", "Maps", "Backups", "Data" }.All(x => Directory.Exists(Path.Combine(workspace.Root, x))));
 Check("path-traversal-rejected", Reject(() => Workspace.Under(workspace.Servers, "../escape")));
 Check("absolute-path-rejected", Reject(() => Workspace.Under(workspace.Servers, output)));
 Check("new-roster-empty-no-example-production", workspace.Load().Count == 0);
@@ -20,6 +20,7 @@ Directory.CreateDirectory(Path.Combine(source, "config")); File.WriteAllText(Pat
 var before = Directory.GetFiles(source, "*", SearchOption.AllDirectories).ToDictionary(p => p, Hashes.FileSha);
 var p1 = workspace.Import(source); var p2 = workspace.Import(source);
 Check("same-source-two-separate-packages", p1.Folder != p2.Folder && workspace.Load().Count == 2);
+Check("server-folders-zero-based-numbered", p1.Folder.StartsWith("0.") && p2.Folder.StartsWith("1."));
 Check("original-package-never-mutated", before.All(p => Hashes.FileSha(p.Key) == p.Value));
 Check("config-port-read-without-edit", p1.Ports.SequenceEqual([29989]));
 Check("import-contained-root-rejected", Reject(() => workspace.Import(workspace.ServerDirectory(p1))));
@@ -87,7 +88,7 @@ var stop1 = await Call("stop", p1.Id); Check("single-graceful-off-exits", stop1.
 Check("other-instance-survives-stop", state2.Identity!.IsCurrent());
 await Task.Delay(300);
 var applied = await Call("apply-plugins", p1.Id, files: ["Pigeon.UTSLManager.Core.dll"]); Check("plugin-copy-to-stopped-only", applied.Ok);
-Check("copied-plugin-exact-sha", Hashes.FileSha(Path.Combine(workspace.ServerDirectory(p1), "plugins", "Pigeon.UTSLManager.Core.dll")) == Hashes.FileSha(typeof(Workspace).Assembly.Location));
+Check("copied-plugin-exact-sha", Hashes.FileSha(Path.Combine(workspace.ServerDirectory(p1), "Plugins", "Pigeon.UTSLManager.Core.dll")) == Hashes.FileSha(typeof(Workspace).Assembly.Location));
 Check("backup-manifest-recorded", Directory.GetFiles(workspace.Backups, "manifest.json", SearchOption.AllDirectories).Length == 1);
 Check("cannot-stop-host-with-live-server", !(await Call("shutdown-host")).Ok);
 Check("second-server-graceful-stop", (await Call("stop", p2.Id)).Ok);

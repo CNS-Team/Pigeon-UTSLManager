@@ -111,7 +111,7 @@ public sealed partial class MainWindow : Window {
         if (id == null || !states.Any(s=>s.Profile.Id==id)) { view.Session=null;view.Refresh();return; }
         var model = Model(id); var r = await client.Send(new("read",id,Cursor:model.Cursor));
         if (!r.Ok || r.Log == null) return;
-        if (r.Log.Truncated) { terminals.Remove(id); model=Model(id); model.Feed("[manager] 已超出内存回放范围；完整日志见 data/logs\r\n"); }
+        if (r.Log.Truncated) { terminals.Remove(id); model=Model(id); model.Feed("[manager] 已超出内存回放范围；完整日志见 Data/logs\r\n"); }
         foreach (var chunk in r.Log.Chunks) model.Feed(chunk.Text);
         model.Cursor=r.Log.Cursor; view.Session=model; view.Refresh();
     }

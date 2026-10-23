@@ -14,7 +14,7 @@ internal static class Program {
             ? Path.GetDirectoryName(Environment.ProcessPath!)! : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", ".."));
         Root = index >= 0 && args.Length > index + 1 ? Path.GetFullPath(args[index + 1]) : defaultRoot;
         try { return AppBuilder.Configure<ManagerApp>().UsePlatformDetect().LogToTrace().StartWithClassicDesktopLifetime(args); }
-        catch (Exception e) { Directory.CreateDirectory(Path.Combine(Root, "data")); File.AppendAllText(Path.Combine(Root, "data", "ui-error.log"), e + Environment.NewLine); return 1; }
+        catch (Exception e) { Directory.CreateDirectory(Path.Combine(Root, "Data")); File.AppendAllText(Path.Combine(Root, "Data", "ui-error.log"), e + Environment.NewLine); return 1; }
     }
 }
 public sealed partial class ManagerApp : Application {

@@ -38,6 +38,6 @@ try {
 } finally {
     if (Test-Path -LiteralPath $fixtureMarker) { Remove-Item -LiteralPath $fixtureMarker -Force }
 }
-$leftovers = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like (Join-Path $package 'app/host/*') })
+$leftovers = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like (Join-Path $package 'App/host/*') })
 if ($leftovers.Count -ne 0) { throw 'Fixture host process remains.' }
 [pscustomobject]@{ Passed=$result.passed; Failed=$result.failed; ExitCode=$process.ExitCode; Evidence=$evidence; ProductHash=(Get-FileHash -LiteralPath (Join-Path $package 'UTSl-Manager.exe')).Hash; FixtureProcessesStopped=$true; Scope='packaged local GUI and probe servers only; no production servers or game clients' } | ConvertTo-Json -Depth 5
