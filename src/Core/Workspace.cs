@@ -23,7 +23,15 @@ public sealed class Workspace {
             if ((Directory.Exists(current) || File.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new IOException("不允许符号链接 / 重解析点：" + current);
     }
     public static string Under(string root, string relative) {
-        if (Path.IsPathRooted(relative)) throw new IOException("只允许相对路径");
+        if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative)) throw new IOException("只允许非空相对路径");
+        foreach (string part in relative.Split(['/', '\\'], StringSplitOptions.None)) {
+            if (part.Length == 0 || part is "." or ".." || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || part.EndsWith('.') || part.EndsWith(' '))
+                throw new IOException("路径包含非法目录项");
+            string stem = part.Split('.')[0];
+            if (new[] { "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$" }.Contains(stem, StringComparer.OrdinalIgnoreCase)
+                || (stem.Length == 4 && (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) && stem[3] is >= '1' and <= '9'))
+                throw new IOException("禁止 Windows 设备路径");
+        }
         string full = Path.GetFullPath(Path.Combine(root, relative));
         if (!full.StartsWith(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new IOException("路径越界");
         EnsureNoLinks(full); return full;

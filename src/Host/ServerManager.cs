@@ -21,6 +21,7 @@ sealed class ServerManager(Workspace workspace) {
         public Task Cleanup = Task.CompletedTask;
         public bool OffSent;
         public string? StopSaveDetail;
+        public RuntimeLaunch? Launch;
     }
     readonly ConcurrentDictionary<string, Session> sessions = new();
     readonly ConcurrentDictionary<string, SemaphoreSlim> gates = new();
@@ -42,9 +43,9 @@ sealed class ServerManager(Workspace workspace) {
         return profiles.Select(p => {
         if (sessions.TryGetValue(p.Id, out var s) && s.Terminal is { } t && t.Identity.IsCurrent()) {
             long memory = 0; try { t.Process.Refresh(); memory = t.Process.WorkingSet64; } catch { }
-            return new ServerState(p, s.State, t.Identity, memory, s.Error);
+            return new ServerState(p, s.State, t.Identity, memory, s.Error, s.Launch?.Directory, s.Launch?.ManifestPath);
         }
-        externalProcesses.TryGetValue(workspace.ServerExecutable(p), out var external);
+        externalProcesses.TryGetValue(p.Id, out var external);
         // Display cache entries can outlive an exit, but may never confer ownership.
         if (external != null && !external.IsCurrent()) external = null;
         return new ServerState(p, external != null ? "EXTERNAL" : s?.State ?? "STOPPED", external, 0, s?.Error);
@@ -53,23 +54,52 @@ sealed class ServerManager(Workspace workspace) {
     Dictionary<string, ProcessIdentity> DisplayExternal(IEnumerable<ServerProfile> profiles) {
         lock (externalCacheSync) {
             if (externalCacheAt != 0 && Environment.TickCount64 - externalCacheAt < 900) return externalCache;
-            var paths = profiles.Select(workspace.ServerExecutable).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var registered = profiles.ToArray();
             var found = new Dictionary<string, ProcessIdentity>(StringComparer.OrdinalIgnoreCase);
             foreach (var proc in Process.GetProcesses()) using (proc) {
                 try {
                     string? exe = proc.MainModule?.FileName;
-                    if (!proc.HasExited && exe != null && paths.Contains(exe)) found.TryAdd(exe, new(proc.Id, proc.StartTime.ToUniversalTime().Ticks, exe));
+                    if (!proc.HasExited && exe != null) foreach (var profile in registered)
+                        if (MatchesExecutable(profile, exe)) found.TryAdd(profile.Id, new(proc.Id, proc.StartTime.ToUniversalTime().Ticks, exe));
                 } catch { }
             }
+            foreach (var profile in registered) if (RuntimeMarker(profile) is {} marker) found.TryAdd(profile.Id, marker);
             externalCache = found; externalCacheAt = Environment.TickCount64; return found;
         }
     }
+    bool MatchesExecutable(ServerProfile profile, string executable) {
+        if (string.Equals(workspace.ServerExecutable(profile), executable, StringComparison.OrdinalIgnoreCase)) return true;
+        // A host restart must still recognize an old sandbox as external. Selection
+        // changes must never turn an already running generation into an orphan.
+        if (profile.Id.Length == 0 || profile.Id is "." or ".." || profile.Id.EndsWith('.')
+            || profile.Id.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_' or '.'))) return false;
+        string root = Path.GetFullPath(Path.Combine(workspace.Root, "Runtime", profile.Id));
+        string relative = Path.GetRelativePath(root, executable);
+        string[] parts = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 && Guid.TryParseExact(parts[0], "N", out _)
+            && string.Equals(Path.GetFullPath(Path.Combine(root, parts[0], profile.Executable)), executable, StringComparison.OrdinalIgnoreCase);
+    }
     ProcessIdentity? External(ServerProfile p) {
-        string exe = workspace.ServerExecutable(p);
+        if (RuntimeMarker(p) is {} marker) return marker;
         foreach (var proc in Process.GetProcesses()) using (proc) {
-            try { if (!proc.HasExited && string.Equals(proc.MainModule?.FileName, exe, StringComparison.OrdinalIgnoreCase)) return new(proc.Id, proc.StartTime.ToUniversalTime().Ticks, exe); } catch { }
+            try { if (!proc.HasExited && proc.MainModule?.FileName is {} exe && MatchesExecutable(p, exe)) return new(proc.Id, proc.StartTime.ToUniversalTime().Ticks, exe); } catch { }
         }
         return null;
+    }
+    ProcessIdentity? RuntimeMarker(ServerProfile profile) {
+        string source = workspace.ServerDirectory(profile);
+        string path = Workspace.Under(source, ".manager-runtime-process.json");
+        if (!File.Exists(path)) return null;
+        try {
+            var marker = Json.Decode<RuntimeProcessMarker>(File.ReadAllText(path));
+            if (!string.Equals(marker.ServerDirectory, source, StringComparison.OrdinalIgnoreCase) || !marker.Identity.IsCurrent()) return null;
+            if (!string.Equals(marker.Identity.Executable, marker.Launch.Executable, StringComparison.OrdinalIgnoreCase)) return null;
+            // The marker may deny a duplicate launch, never grant stop ownership.
+            return marker.Identity;
+        } catch (IOException) { throw; }
+        catch (Exception e) when (e is System.Text.Json.JsonException or ArgumentException or NullReferenceException) {
+            throw new IOException("原服运行身份记录损坏，拒绝猜测是否可以再次启动", e);
+        }
     }
     public async Task<Reply> Handle(Request request) {
         if (request.Action == "ping") return new(true, "后台就绪");
@@ -106,6 +136,15 @@ sealed class ServerManager(Workspace workspace) {
             return await operation;
         }
         if (request.Action == "plugins") return new(true, Plugins: workspace.Plugins());
+        if (request.Action == "engine-list") { lock (filesGate) return new(true, Engines: new EngineLibrary(workspace).Catalog()); }
+        if (request.Action == "shared-library-list") { lock (filesGate) return new(true, Artifacts: new SharedRuntime(workspace).Catalog()); }
+        if (request.Action == "shared-library-import") {
+            lock (filesGate) {
+                var library = new SharedRuntime(workspace);
+                library.Import(request.Files ?? []);
+                return new(true, "已导入总插件库；旧版本及运行中的插件保持锁定", Artifacts: library.Catalog());
+            }
+        }
         if (request.Action == "import") { lock (filesGate) { var p = workspace.Import(request.Value ?? ""); return new(true, "服务端包已复制，原目录未修改", Servers: Snapshot(), Path: workspace.ServerDirectory(p)); } }
         if (request.Action == "register-existing") { lock(filesGate){var p=workspace.RegisterExisting(request.Value??"");return new(true,"已登记原目录；未复制、未启动、未接管当前进程",Servers:Snapshot(),Path:workspace.ServerDirectory(p));} }
         if (request.Action == "library-add") { lock (filesGate) workspace.AddPlugins(request.Files ?? []); return new(true, "已导入插件库", Plugins: workspace.Plugins()); }
@@ -115,6 +154,9 @@ sealed class ServerManager(Workspace workspace) {
         }
         var profile = workspace.Load().SingleOrDefault(p => p.Id == request.Id) ?? throw new IOException("服务器不存在");
         var session = sessions.GetOrAdd(profile.Id, _ => new());
+        if (request.Action == "runtime-selection") {
+            lock (filesGate) return new(true, RuntimeSelection: new SharedRuntime(workspace).GetSelection(profile));
+        }
         if (request.Action is "world-consoles" or "world-send") {
             if (session.Terminal is not { } worldTerminal || !worldTerminal.Identity.IsCurrent() || session.WorldPipe is null)
                 return new(false, "没有所属的世界控制台；不会接管外部进程");
@@ -163,6 +205,41 @@ sealed class ServerManager(Workspace workspace) {
                     workspace.Audit("profile-update", profile.Id, updated); return new(true, "启动配置已保存；未改服务端原配置", Servers: Snapshot());
                 case "apply-plugins":
                     RequireStopped(profile, session); lock (filesGate) workspace.ApplyPlugins(profile, request.Files ?? []); return new(true, "已备份并同步到停止的服务端，尚未加载");
+                case "runtime-selection-save":
+                    RequireStopped(profile, session);
+                    lock (filesGate) new SharedRuntime(workspace).SaveSelection(profile, Json.Decode<RuntimeSelection>(request.Value ?? ""));
+                    return new(true, "已保存此服插件与版本选择；下次启动生成独立沙箱", RuntimeSelection: new SharedRuntime(workspace).GetSelection(profile));
+                case "engine-import-current":
+                    RequireStopped(profile, session);
+                    lock (filesGate) {
+                        var engines = new EngineLibrary(workspace);
+                        var artifact = engines.Import(profile);
+                        return new(true, "已收录当前核心及代码依赖；未切换此服版本", Engines: engines.Catalog(), Path: artifact.Revision);
+                    }
+                case "runtime-import-current":
+                    RequireStopped(profile, session);
+                    lock (filesGate) {
+                        string plugins = Workspace.Under(workspace.ServerDirectory(profile), "plugins");
+                        var inputs = new List<string>();
+                        if (Directory.Exists(plugins)) {
+                            inputs.AddRange(Directory.GetFiles(plugins, "*.dll"));
+                            foreach (var directory in Directory.GetDirectories(plugins)) {
+                                Workspace.EnsureNoLinks(directory);
+                                inputs.AddRange(Directory.GetFiles(directory, "*.dll"));
+                            }
+                        }
+                        var library = new SharedRuntime(workspace);
+                        var imported = library.Import(inputs.ToArray());
+                        var selection = new RuntimeSelection(false, imported);
+                        library.SaveSelection(profile, selection);
+                        return new(true, "已收录原服插件并锁定版本；沙箱尚未启用", Artifacts: library.Catalog(), RuntimeSelection: selection);
+                    }
+                case "runtime-preview":
+                    RequireStopped(profile, session);
+                    lock (filesGate) {
+                        var launch = new SharedRuntime(workspace).Prepare(profile);
+                        return new(true, "已准备并校验运行目录；未创建服务端进程", Path: launch.Directory);
+                    }
                 default: return new(false, "未知操作");
             }
         } finally { gates[profile.Id].Release(); }
@@ -184,6 +261,15 @@ sealed class ServerManager(Workspace workspace) {
                 ConPty terminal;
                 await gate.WaitAsync(cancel);
                 try {
+                    RuntimeLaunch? prepared = null;
+                    if (session.Terminal is not { } existing || !existing.Identity.IsCurrent()) {
+                        if (External(profile) != null) throw new IOException("外部服务端正在运行，拒绝接管或重复启动");
+                        // File scans, hashing and sandbox creation run on the queue worker,
+                        // outside lifecycleSync so stop/cancel and UI status stay responsive.
+                        cancel.ThrowIfCancellationRequested();
+                        lock (filesGate) prepared = new SharedRuntime(workspace).Prepare(profile);
+                        cancel.ThrowIfCancellationRequested();
+                    }
                     lock (lifecycleSync) {
                     cancel.ThrowIfCancellationRequested();
                     if (session.State is "STOPPING" or "STOP_TIMEOUT") throw new IOException("此服已请求停止，启动队列暂停");
@@ -191,7 +277,7 @@ sealed class ServerManager(Workspace workspace) {
                     else {
                         if (External(profile) != null) throw new IOException("外部服务端正在运行，拒绝接管或重复启动");
                         cancel.ThrowIfCancellationRequested();
-                        terminal = Launch(profile, session, cancel);
+                        terminal = Launch(profile, session, cancel, prepared ?? throw new IOException("运行目录尚未准备"));
                     }
                     session.State = "STARTING";
                     }
@@ -337,8 +423,8 @@ sealed class ServerManager(Workspace workspace) {
         session.State = "STOPPED"; session.Error = null;
         return "STOPPED; " + session.StopSaveDetail;
     }
-    ConPty Launch(ServerProfile profile, Session session, CancellationToken cancel) {
-        string exe = workspace.ServerExecutable(profile);
+    ConPty Launch(ServerProfile profile, Session session, CancellationToken cancel, RuntimeLaunch launch) {
+        string exe = launch.Executable;
         if (!File.Exists(exe)) throw new IOException("服务端程序缺失");
         foreach (int port in profile.Ports) {
             if (port < 1 || port > 65535) throw new IOException("端口范围错误");
@@ -349,25 +435,45 @@ sealed class ServerManager(Workspace workspace) {
         ConPty terminal;
         session.WorldPipe = "UTSLWorlds_" + Guid.NewGuid().ToString("N");
         cancel.ThrowIfCancellationRequested();
-        try { terminal = new(exe, workspace.ServerDirectory(profile), profile.Arguments, profile.HeadlessWorlds, session.WorldPipe); }
-        catch { session.State = "ERROR"; throw; }
-        session.Terminal = terminal;
-        workspace.Audit("start-owned-conpty", profile.Id, terminal.Identity);
-        Json.Save(Path.Combine(workspace.Data, "runs", profile.Id + ".json"), terminal.Identity);
+        FileStream lease;
+        try {
+            lease = new FileStream(Workspace.Under(workspace.ServerDirectory(profile), ".manager-runtime-owner.lock"),
+                FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+        } catch (IOException e) { throw new IOException("原服数据目录已由另一管理器占用，拒绝并发启动", e); }
+        try {
+            cancel.ThrowIfCancellationRequested();
+            if (External(profile) != null) throw new IOException("原服已存在运行代次，拒绝重复启动");
+            terminal = new(exe, launch.Directory, profile.Arguments, profile.HeadlessWorlds, session.WorldPipe);
+        }
+        catch { lease.Dispose(); session.State = "ERROR"; throw; }
+        session.Terminal = terminal; session.Launch = launch;
         var drain = terminal.Drain(text => Append(profile.Id, session, text));
         session.Exit = terminal.Process.WaitForExitAsync();
         var exited = session.Exit;
         session.Cleanup = Task.Run(async () => {
-            await exited;
-            await Task.Run(terminal.Dispose); await drain;
-            Append(profile.Id, session, "\r\n[manager] 进程已退出\r\n");
-            lock (lifecycleSync) {
-                if (ReferenceEquals(session.Terminal, terminal)) { session.Terminal = null; session.WorldPipe = null; session.State = "STOPPED"; }
+            try {
+                await exited;
+                await Task.Run(terminal.Dispose); await drain;
+                Append(profile.Id, session, "\r\n[manager] 进程已退出\r\n");
+            } finally {
+                lease.Dispose();
+                lock (lifecycleSync) {
+                    if (ReferenceEquals(session.Terminal, terminal)) { session.Terminal = null; session.WorldPipe = null; session.State = "STOPPED"; }
+                }
             }
         });
+        // Cleanup owns the process and lease before any fallible evidence IO.
+        workspace.Audit("start-owned-conpty", profile.Id, new { terminal.Identity, launch.Directory, launch.ManifestPath, launch.GenerationId });
+        Json.Save(Path.Combine(workspace.Data, "runs", profile.Id + ".json"), terminal.Identity);
+        Json.Save(Path.Combine(workspace.Data, "runtime-runs", profile.Id + ".json"), new { terminal.Identity, launch });
+        Json.Save(Workspace.Under(workspace.ServerDirectory(profile), ".manager-runtime-process.json"),
+            new RuntimeProcessMarker(workspace.ServerDirectory(profile), terminal.Identity, launch));
         return terminal;
     }
-    void RequireStopped(ServerProfile profile, Session session) { if (session.Terminal?.Identity.IsCurrent() == true || External(profile) != null) throw new IOException("必须先停止目标服，拒绝修改运行中的服务端"); }
+    void RequireStopped(ServerProfile profile, Session session) {
+        if (startupQueue.Active || stopQueue.Active) throw new IOException("启停队列运行中，拒绝修改待启动或停止中的服务端");
+        if (session.Terminal?.Identity.IsCurrent() == true || External(profile) != null) throw new IOException("必须先停止目标服，拒绝修改运行中的服务端");
+    }
     void Append(string id, Session s, string text) {
         lock (s.Sync) {
             s.Chunks.Enqueue(new(++s.Sequence, text)); s.Characters += text.Length;

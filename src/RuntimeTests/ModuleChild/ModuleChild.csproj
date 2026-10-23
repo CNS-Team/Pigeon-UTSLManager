@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><AssemblyName>RuntimeFixture.ChildModule</AssemblyName></PropertyGroup>
+  <ItemGroup><Reference Include="UnifierTSL"><HintPath>$(RuntimeCoreDirectory)/UnifierTSL.dll</HintPath><Private>false</Private></Reference><ProjectReference Include="../ModuleCore/ModuleCore.csproj"/></ItemGroup>
+</Project>

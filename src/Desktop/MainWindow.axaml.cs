@@ -70,12 +70,14 @@ public sealed partial class MainWindow : Window {
         } finally { rebuilding = false; }
     }
     void BuildTargets() {
+        if (libraryBusy) { libraryTargetsPending = true; return; }
         rebuilding = true;
         try {
             var targetId = (PluginTarget.SelectedItem as ComboBoxItem)?.Tag as string;
             PluginTarget.ItemsSource = states.Select(s=> new ComboBoxItem { Content = s.Profile.Name, Tag = s.Profile.Id }).ToArray();
             PluginTarget.SelectedItem = PluginTarget.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == (targetId ?? selectedId));
         } finally { rebuilding = false; }
+        if (libraryInitialized && PluginsPage.IsVisible && runtimeTargetId != PluginTargetId) _ = LoadRuntimeTarget();
     }
     static string StateName(string state) => state switch {
         "RUNNING"=>"世界已就绪", "STARTING"=>"等待世界加载", "START_FAILED"=>"世界启动未就绪",
@@ -88,6 +90,9 @@ public sealed partial class MainWindow : Window {
         var s = Selected;
         SelectedTitle.Text = s?.Profile.Name ?? "服务器工作区";
         SelectedSubtitle.Text = s == null ? "尚未导入服务器" : StateName(s.State) + "  /  " + s.Profile.Folder;
+        ToolTip.SetTip(SelectedSubtitle, s == null ? null : "原服目录：" + (s.Profile.ExistingDirectory ?? Path.Combine(workspace.Servers, s.Profile.Folder))
+            + (s.RuntimeDirectory == null ? "" : "\n本代运行目录：" + s.RuntimeDirectory)
+            + (s.RuntimeManifest == null ? "" : "\n本代运行清单：" + s.RuntimeManifest));
         PidLabel.Text = "PID  " + (s?.Identity?.Pid.ToString() ?? "—");
         MemoryLabel.Text = "内存  " + (s?.Identity != null && s.MemoryBytes > 0 ? (s.MemoryBytes/1048576d).ToString("N0")+" MB" : "—");
         UptimeLabel.Text = "运行  " + (s?.Identity != null ? (DateTime.UtcNow-new DateTime(s.Identity.StartedUtcTicks,DateTimeKind.Utc)).ToString(@"hh\:mm\:ss") : "—");
@@ -103,6 +108,7 @@ public sealed partial class MainWindow : Window {
         foreach (var pane in consolePanes) { pane.Send.IsEnabled = pane.Input.IsEnabled = !busy && !stopping && owned && (pane.IsHost || (pane.World != null && s?.State == "RUNNING")); }
         ForceButton.IsVisible = s?.State == "STOP_TIMEOUT" && !busy && !queued;
         StateHint.Text = stopQueue?.Active == true ? stopQueue.Message : startupQueue?.Active == true ? startupQueue.Message : s?.Error ?? (s?.Identity == null ? stopQueue?.Message ?? startupQueue?.Message ?? "服务器已停止" : "已核验启动时全部世界就绪；玩家实际进入仍以游戏测试为准");
+        UpdateLibraryControls();
     }
     async void Resize(string? id,int columns,int rows) { if(id==null)return;try { await client.Send(new("resize",id,$"{columns}x{rows}")); } catch { } }
     async Task<Reply?> Act(Request request, string pending) {
@@ -146,11 +152,6 @@ public sealed partial class MainWindow : Window {
         try{if(studio==null){studio=new StudioWorkspace(this,Path.Combine(workspace.App,"mapstudio"),workspace.Maps);MapsPage.Content=studio.View;}Page(2);}
         catch(Exception ex){StatusText.Text=ex.Message;}
     }
-    async Task LoadPlugins(){try{var r=await client.Send(new("plugins"));if(!r.Ok)throw new IOException(r.Message);PluginCount.Text=$"{r.Plugins!.Length} 个插件";PluginList.ItemsSource=r.Plugins.Select(p=>{
-        var grid=new Grid{ColumnDefinitions=new("*,180,125,150"),Margin=new(2,5)};var label=new StackPanel{Spacing=3};label.Children.Add(new TextBlock{Text=p.Name,FontWeight=FontWeight.SemiBold});label.Children.Add(new TextBlock{Text=p.FileName,FontSize=10,Foreground=Brush.Parse("#9397A5")});grid.Children.Add(label);
-        foreach(var pair in new[]{(1,p.Version),(2,$"{p.Bytes/1024d:N1} KB"),(3,p.Sha256[..12])}){var t=new TextBlock{Text=pair.Item2,VerticalAlignment=Avalonia.Layout.VerticalAlignment.Center,FontFamily=FontFamily.Parse("Cascadia Mono,Consolas"),FontSize=11};Grid.SetColumn(t,pair.Item1);grid.Children.Add(t);}return new ListBoxItem{Content=grid,Tag=p.FileName};}).ToArray();}catch(Exception ex){StatusText.Text=ex.Message;}}
-    async void AddPluginsClick(object? s,RoutedEventArgs e){var files=await StorageProvider.OpenFilePickerAsync(new(){Title="导入托管插件 DLL",AllowMultiple=true,FileTypeFilter=[new FilePickerFileType("程序集"){Patterns=["*.dll"]}]});var paths=files.Select(f=>f.TryGetLocalPath()).Where(p=>p!=null).Cast<string>().ToArray();if(paths.Length==0)return;await Act(new("library-add",Files:paths),"验证插件元数据与SHA…");await LoadPlugins();}
-    async void ApplyPluginsClick(object? s,RoutedEventArgs e){var id=(PluginTarget.SelectedItem as ComboBoxItem)?.Tag as string;var files=PluginList.SelectedItems?.Cast<ListBoxItem>().Select(i=>(string)i.Tag!).ToArray()??[];if(id==null||files.Length==0){StatusText.Text="请选择插件和目标服务器";return;}var state=states.Single(s=>s.Profile.Id==id);if(!await Confirm("同步到停止的服务器",$"{state.Profile.Name}\n{string.Join('\n',files)}\n将核SHA并保留原件备份；不会启动或热载。"))return;var r=await Act(new("apply-plugins",id,Files:files),"备份并同步…");PluginStatus.Text=r?.Message??"未完成";}
     void ExportLogClick(object? s,RoutedEventArgs e){if(selectedId==null)return;string path=Path.Combine(workspace.Data,"logs",selectedId+".ansi.log");if(File.Exists(path))Open(path);else StatusText.Text="尚无日志";}
     static void Open(string path)=>Process.Start(new ProcessStartInfo(path){UseShellExecute=true})?.Dispose();
     void OpenRootClick(object? s,RoutedEventArgs e)=>Open(workspace.Root);

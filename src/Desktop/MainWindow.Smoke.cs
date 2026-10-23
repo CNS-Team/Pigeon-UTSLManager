@@ -36,7 +36,7 @@ public sealed partial class MainWindow {
             Check(prefix+"-separate-action-groups",Before(SelectedActionsGroup,BulkActionsGroup) && Before(BulkActionsGroup,SettingsActionsGroup) && Centered(SelectedActionsGroup,ServerToolbar,false) && Centered(BulkActionsGroup,ServerToolbar,false) && Centered(SettingsActionsGroup,ServerToolbar,false));
             Check(prefix+"-title-does-not-overlap-toolbar",Before(SelectedTitle,ServerToolbar) && Before(SelectedSubtitle,ServerToolbar));
             Check(prefix+"-metrics-do-not-overlap-world-controls",Before(ServerMetrics,WorldControls) && Inside(WorldControls,ServerDetails));
-            foreach(var button in buttons.Concat(new[]{WorldTab1,WorldTab2,WorldTab3,HostConsoleButton})) {
+            foreach(var button in buttons.Concat(new[]{WorldTab1,WorldTab2,WorldTab3})) {
                 var content=ButtonContent(button);
                 bool aligned=content!=null && Inside(content,button) && Centered(content,button);
                 if(content is StackPanel row)aligned&=row.Children.All(child=>Centered(child,row,false));
@@ -77,6 +77,11 @@ public sealed partial class MainWindow {
             Check("only-explicit-stopped-state-reports-stopped",StateName("STOPPED")=="已停止" && new[]{"SAVING","START_CANCELLED","STOP_SAVE_FAILED","STOP_IDENTITY_CHANGED","STOP_FAILED","FUTURE_STATE"}.All(state=>StateName(state)!="已停止"));
             Check("fixture-requires-empty-marked-workspace",fixture==null || canFixture);
             Check("traffic-and-right-window-controls",TrafficControls.Children.Count==3 && WindowControls.Children.OfType<Button>().Count()==4);
+            // CheckBox inherits Button; inspect the actual toolbar children explicitly.
+            var worldControlChildren=WorldControls.Children.ToArray();
+            Check("only-world-tabs-no-manual-host-entry",worldControlChildren.SequenceEqual(new Control[]{WorldTab1,WorldTab2,WorldTab3,TripleToggle})
+                && worldControlChildren.OfType<CheckBox>().SequenceEqual(new[]{TripleToggle})
+                && new[]{WorldTab1,WorldTab2,WorldTab3}.Select(button=>button.Tag?.ToString()).SequenceEqual(new[]{"0","1","2"}));
             MaximizeWindowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(250);
             Check("right-maximize-button",WindowState==WindowState.Maximized);
             MaximizeWindowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(150);
@@ -131,6 +136,7 @@ public sealed partial class MainWindow {
                 Check("world-tab-two-single-view",await WaitUntil(()=>FreshBatch(beforeSecondBatch) && WorldFrame(0,fixtureWorldNames[1]) && consolePanes.Skip(1).All(p=>!p.Border.IsVisible)));
             }
             PluginsNav.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(300);Check("actual-plugins-tab",PluginsPage.IsVisible);await Snap("04-plugin-library");
+            if (canFixture && Program.Args.Contains("--runtime-library-smoke")) await RuntimeLibrarySmoke(Check, Snap, output, fixtureIds.ToArray());
             MapsNav.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(400);
             Check("actual-map-tab-same-window",MapsPage.IsVisible&&studio!=null&&MapsPage.Content==studio.View);
             Check("no-second-generator-window",(Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Windows.Count==1);

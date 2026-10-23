@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Pigeon.ConsoleDecision.Bench</AssemblyName>
+    <TerminalSources Condition="'$(TerminalSources)' == ''">../Product</TerminalSources>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.2"/>
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2"/>
+    <PackageReference Include="VtNetCore" Version="1.0.30"/>
+    <Reference Include="Pigeon.UTSLManager.Core"><HintPath>$(CoreReference)</HintPath></Reference>
+    <Compile Include="$(TerminalSources)/TerminalView.cs" Link="Product/TerminalView.cs"/>
+    <Compile Include="$(TerminalSources)/ConsoleCollector.cs" Link="Product/ConsoleCollector.cs"/>
+  </ItemGroup>
+  <Target Name="RequireFrozenCore" BeforeTargets="ResolveReferences" Condition="!Exists('$(CoreReference)')">
+    <Error Text="Use Run.ps1 to create a private source snapshot and supply a frozen CoreReference."/>
+  </Target>
+</Project>

@@ -12,7 +12,7 @@ if($LASTEXITCODE -ne 0){throw 'Map generator build failed'}
 & dotnet build (Join-Path $map 'src/NativeWorker/NativeWorker.csproj') -c Release -o (Join-Path $root 'out/map-worker') --nologo
 if($LASTEXITCODE -ne 0){throw 'Map worker build failed'}
 New-Item -ItemType Directory -Path $destination|Out-Null
-foreach($folder in @('Plugins','Servers','Maps','Backups','Data','App/manager','App/host','App/mapstudio/app','App/mapstudio/worker','App/mapstudio/engine','App/mapstudio/lib/TEdit','App/licenses')){New-Item -ItemType Directory -Path (Join-Path $destination $folder)|Out-Null}
+foreach($folder in @('Core','Plugins','Servers','Runtime','Maps','Backups','Data','App/manager','App/host','App/mapstudio/app','App/mapstudio/worker','App/mapstudio/engine','App/mapstudio/lib/TEdit','App/licenses')){New-Item -ItemType Directory -Path (Join-Path $destination $folder)|Out-Null}
 foreach($pair in @(@('out/manager','App/manager'),@('out/host','App/host'),@('out/map-app','App/mapstudio/app'),@('out/map-worker','App/mapstudio/worker'))){Get-ChildItem -LiteralPath (Join-Path $root $pair[0])|Copy-Item -Destination (Join-Path $destination $pair[1]) -Recurse}
 $lock=Get-Content (Join-Path $map 'dependency-manifest.json') -Raw|ConvertFrom-Json
 foreach($file in @($lock.engine)+@($lock.tedit)){$source=Join-Path $map $file.path;$target=Join-Path $destination ('App/mapstudio/'+$file.path);Copy-Item -LiteralPath $source -Destination $target;if((Get-FileHash -LiteralPath $target).Hash -ne $file.sha256){throw 'Packaged dependency hash mismatch'}}

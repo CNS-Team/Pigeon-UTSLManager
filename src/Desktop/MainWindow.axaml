@@ -56,7 +56,7 @@
        </StackPanel>
       </Grid>
       <Border Grid.Row="1" Margin="24,0,22,14" BorderBrush="#3A3B44" BorderThickness="0,0,0,1" Padding="0,0,0,12">
-       <Grid x:Name="ServerDetails" ColumnDefinitions="*,Auto" ColumnSpacing="16"><StackPanel x:Name="ServerMetrics" Orientation="Horizontal" Spacing="18" VerticalAlignment="Center"><TextBlock x:Name="PidLabel" Text="PID —" Classes="muted"/><TextBlock x:Name="MemoryLabel" Text="内存 —" Classes="muted"/><TextBlock x:Name="UptimeLabel" Text="运行 —" Classes="muted"/></StackPanel><StackPanel x:Name="WorldControls" Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"><Button x:Name="WorldTab1" Classes="world-tab" Content="1" Tag="0" Click="WorldTabClick" ToolTip.Tip="世界 1"/><Button x:Name="WorldTab2" Classes="world-tab" Content="2" Tag="1" Click="WorldTabClick" ToolTip.Tip="世界 2"/><Button x:Name="WorldTab3" Classes="world-tab" Content="3" Tag="2" Click="WorldTabClick" ToolTip.Tip="世界 3"/><Button x:Name="HostConsoleButton" Classes="world-tab" Width="54" Content="宿主" Tag="-1" Click="WorldTabClick"/><CheckBox x:Name="TripleToggle" Content="显示三个" IsCheckedChanged="WorldLayoutChanged" FontSize="11" VerticalAlignment="Center" Margin="5,0,0,0"/></StackPanel></Grid>
+       <Grid x:Name="ServerDetails" ColumnDefinitions="*,Auto" ColumnSpacing="16"><StackPanel x:Name="ServerMetrics" Orientation="Horizontal" Spacing="18" VerticalAlignment="Center"><TextBlock x:Name="PidLabel" Text="PID —" Classes="muted"/><TextBlock x:Name="MemoryLabel" Text="内存 —" Classes="muted"/><TextBlock x:Name="UptimeLabel" Text="运行 —" Classes="muted"/></StackPanel><StackPanel x:Name="WorldControls" Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"><Button x:Name="WorldTab1" Classes="world-tab" Content="1" Tag="0" Click="WorldTabClick" ToolTip.Tip="世界 1"/><Button x:Name="WorldTab2" Classes="world-tab" Content="2" Tag="1" Click="WorldTabClick" ToolTip.Tip="世界 2"/><Button x:Name="WorldTab3" Classes="world-tab" Content="3" Tag="2" Click="WorldTabClick" ToolTip.Tip="世界 3"/><CheckBox x:Name="TripleToggle" Content="显示三个" IsCheckedChanged="WorldLayoutChanged" FontSize="11" VerticalAlignment="Center" Margin="5,0,0,0"/></StackPanel></Grid>
       </Border>
       <Grid Grid.Row="2" RowDefinitions="*,Auto" Margin="24,0,22,18">
        <Grid x:Name="Consoles" ColumnSpacing="10"/>
@@ -64,11 +64,64 @@
       </Grid>
      </Grid>
     </Grid>
-    <Grid x:Name="PluginsPage" IsVisible="False" RowDefinitions="Auto,Auto,*,Auto" Margin="30,24">
-     <Grid ColumnDefinitions="*,Auto"><StackPanel Spacing="5"><TextBlock Text="总插件库" FontSize="22" FontWeight="SemiBold"/><TextBlock x:Name="PluginCount" Text="0 个插件" Classes="muted"/></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"><Button Click="OpenLibraryClick" Classes="icon" ToolTip.Tip="打开插件库"><LucideIcon Kind="FolderOpen" Size="17"/></Button><Button Click="AddPluginsClick" Classes="primary"><StackPanel Orientation="Horizontal" Spacing="8"><LucideIcon Kind="Plus" Size="16"/><TextBlock Text="导入 DLL"/></StackPanel></Button></StackPanel></Grid>
-     <Grid Grid.Row="1" ColumnDefinitions="*,180,125,150" Margin="12,27,15,10"><TextBlock Text="插件 / 文件名" Classes="muted"/><TextBlock Grid.Column="1" Text="程序集版本" Classes="muted"/><TextBlock Grid.Column="2" Text="大小" Classes="muted"/><TextBlock Grid.Column="3" Text="SHA256" Classes="muted"/></Grid>
-     <ListBox x:Name="PluginList" Grid.Row="2" SelectionMode="Multiple" Background="#1D1E23"/>
-     <Border Grid.Row="3" BorderBrush="#3A3B44" BorderThickness="0,1,0,0" Padding="0,17,0,0"><Grid ColumnDefinitions="Auto,280,*,Auto" ColumnSpacing="14"><TextBlock Text="目标服务器" VerticalAlignment="Center" Classes="muted"/><ComboBox x:Name="PluginTarget" Grid.Column="1"/><TextBlock x:Name="PluginStatus" Grid.Column="2" Text="尚未同步" VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap"/><Button Grid.Column="3" Click="ApplyPluginsClick"><StackPanel Orientation="Horizontal" Spacing="8"><LucideIcon Kind="ArrowDownToLine" Size="16"/><TextBlock Text="备份并同步所选"/></StackPanel></Button></Grid></Border>
+    <Grid x:Name="PluginsPage" IsVisible="False" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14" Margin="26,22">
+     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+      <StackPanel Spacing="5"><TextBlock Text="总插件库" FontSize="22" FontWeight="SemiBold"/><TextBlock Text="收录各版本，为每台服务器组合独立运行环境" Classes="muted" FontSize="11"/></StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+       <Button x:Name="RefreshLibraryButton" Click="RefreshLibraryClick" Classes="icon" ToolTip.Tip="刷新总库及目标服已保存的选择"><LucideIcon Kind="RotateCw" Size="16"/></Button>
+       <Button x:Name="ImportSharedPluginsButton" Click="ImportSharedPluginsClick" Classes="primary"><StackPanel Orientation="Horizontal" Spacing="7"><LucideIcon Kind="Plus" Size="16"/><TextBlock Text="收录插件版本"/></StackPanel></Button>
+      </StackPanel>
+     </Grid>
+     <Border Grid.Row="1" Background="#222329" BorderBrush="#393B46" BorderThickness="1" CornerRadius="6" Padding="12,9">
+      <TextBlock x:Name="PluginStatus" Text="打开此页后载入共享库与目标服配置" TextWrapping="Wrap" FontSize="11" MaxHeight="70"/>
+     </Border>
+     <Grid Grid.Row="2" ColumnDefinitions="*,370" ColumnSpacing="16">
+      <Border Background="#1D1E23" BorderBrush="#353740" BorderThickness="1" CornerRadius="7">
+       <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12">
+        <Grid ColumnDefinitions="*,Auto" Margin="3,1,3,10"><TextBlock Text="共享插件 · 所有版本" FontWeight="SemiBold"/><TextBlock x:Name="ArtifactCount" Grid.Column="1" Text="0 个版本" Classes="muted" FontSize="11"/></Grid>
+        <TextBox x:Name="LibrarySearch" Grid.Row="1" PlaceholderText="搜索名称、文件名、版本或 SHA256" TextChanged="LibrarySearchChanged" Margin="0,0,0,9"/>
+        <Grid Grid.Row="2">
+         <ListBox x:Name="ArtifactList" Background="Transparent" SelectionMode="Single"><ListBox.Styles><Style Selector="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/></Style></ListBox.Styles></ListBox>
+         <TextBlock x:Name="LibraryEmptyHint" Text="总库暂无插件，请收录 DLL 或导入目标服现有插件" TextWrapping="Wrap" Classes="muted" MaxWidth="330" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+        </Grid>
+        <TextBlock Grid.Row="3" Text="勾选完整版本；同名插件仅可选一个 SHA256。收录新版本会追加保留旧版本。" TextWrapping="Wrap" Classes="muted" FontSize="10" Margin="3,9,3,0"/>
+       </Grid>
+      </Border>
+      <Border Grid.Column="1" Background="#202127" BorderBrush="#3A3C48" BorderThickness="1" CornerRadius="7">
+       <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16" Spacing="12">
+         <TextBlock Text="目标服运行环境" FontSize="14" FontWeight="SemiBold"/>
+         <ComboBox x:Name="PluginTarget" SelectionChanged="PluginTargetChanged" PlaceholderText="选择目标服务器"/>
+         <TextBlock x:Name="RuntimeTargetStatus" Text="请选择目标服务器" TextWrapping="Wrap" FontSize="11" Foreground="#D6B37E"/>
+         <CheckBox x:Name="RuntimeEnabled" Content="启用独立 runtime 沙箱" IsCheckedChanged="RuntimeEnabledChanged"/>
+         <TextBlock Text="关闭时仍可预选并保存核心与插件，运行沿用原服；开启后使用此处保存的版本。" TextWrapping="Wrap" Classes="muted" FontSize="11"/>
+         <Border Height="1" Background="#393B45"/>
+         <TextBlock Text="UTSL 核心版本" FontWeight="SemiBold"/>
+         <ComboBox x:Name="EngineVersion" SelectionChanged="EngineVersionChanged" PlaceholderText="使用原服核心"/>
+         <TextBlock x:Name="EngineDescription" Text="默认使用目标服原有核心" TextWrapping="Wrap" Classes="muted" FontSize="10"/>
+         <Button x:Name="ImportCurrentEngineButton" Click="ImportCurrentEngineClick" Content="从当前停止服收录核心" HorizontalAlignment="Stretch"/>
+         <Border Height="1" Background="#393B45"/>
+         <TextBlock x:Name="RuntimeSelectionCount" Text="尚未载入插件选择" TextWrapping="Wrap" FontSize="11"/>
+         <Button x:Name="ImportCurrentPluginsButton" Click="ImportCurrentPluginsClick" Content="导入此服现有插件并初始化选择" HorizontalAlignment="Stretch"/>
+         <TextBlock Text="初次导入保留沙箱关闭状态，核对选择后再启用并保存。" TextWrapping="Wrap" Classes="muted" FontSize="10"/>
+         <Border Height="1" Background="#393B45"/>
+         <Button x:Name="SaveRuntimeButton" Click="SaveRuntimeClick" Content="保存此服运行配置" Classes="primary" HorizontalAlignment="Stretch"/>
+         <Button x:Name="PreviewRuntimeButton" Click="PreviewRuntimeClick" Content="生成并查看已保存的沙箱" HorizontalAlignment="Stretch"/>
+         <TextBox x:Name="RuntimePreviewPath" PlaceholderText="沙箱预览路径" IsReadOnly="True" IsVisible="False" TextWrapping="Wrap" FontSize="10"/>
+        </StackPanel>
+       </ScrollViewer>
+      </Border>
+     </Grid>
+     <Expander x:Name="LegacyLibraryExpander" Grid.Row="3" Header="兼容模式 · 复制 DLL 到原服插件目录" IsExpanded="False" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Expanding="LegacyLibraryExpanding">
+      <Border Background="#202127" BorderBrush="#3A3B44" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,6,0,0">
+       <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8" MaxHeight="245">
+        <TextBlock Text="旧复制模式使用独立旧库，备份后写入上方目标服原插件目录；与独立沙箱选择分开管理。" TextWrapping="Wrap" FontSize="11" Foreground="#D6B37E"/>
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8"><TextBlock x:Name="PluginCount" Text="尚未载入旧库" Classes="muted" VerticalAlignment="Center"/><StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"><Button Click="OpenLibraryClick" Content="打开旧库"/><Button x:Name="AddLegacyPluginsButton" Click="AddPluginsClick" Content="导入旧库 DLL"/></StackPanel></Grid>
+        <ListBox x:Name="PluginList" Grid.Row="2" MinHeight="55" MaxHeight="110" SelectionMode="Multiple" Background="#1D1E23"/>
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="12"><TextBlock x:Name="LegacyPluginStatus" Text="请选择旧库插件及上方目标服" VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" FontSize="10"/><Button x:Name="ApplyLegacyPluginsButton" Grid.Column="1" Click="ApplyPluginsClick" Content="备份并复制所选到原服"/></Grid>
+       </Grid>
+      </Border>
+     </Expander>
     </Grid>
     <ContentControl x:Name="MapsPage" IsVisible="False"/>
    </Grid>

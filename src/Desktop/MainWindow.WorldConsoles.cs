@@ -57,10 +57,9 @@ public sealed partial class MainWindow {
         for (int i = 0; i < consolePanes.Length; i++) { var p = consolePanes[i]; p.Border.IsVisible = triple || i == 0; Grid.SetColumn(p.Border, triple ? i : 0); }
         var tabs = new[] { WorldTab1, WorldTab2, WorldTab3 };
         for (int i = 0; i < tabs.Length; i++) { tabs[i].IsEnabled = i < worlds.Length; tabs[i].Classes.Set("primary", activeWorld == i); ToolTip.SetTip(tabs[i], i < worlds.Length ? worlds[i].Name : "世界尚未登记"); }
-        HostConsoleButton.Classes.Set("primary", activeWorld < 0);
     }
     async void WorldTabClick(object? sender, RoutedEventArgs e) {
-        if (sender is not Button button || !int.TryParse(button.Tag?.ToString(), out int index)) return;
+        if (sender is not Button button || !int.TryParse(button.Tag?.ToString(), out int index) || index is < 0 or > 2) return;
         activeWorld = index; ClearConsolePanes(); await RefreshWorldConsoles();
     }
     async void WorldLayoutChanged(object? sender, RoutedEventArgs e) { if (workspace == null) return; if (TripleToggle.IsChecked == true && activeWorld < 0) activeWorld = 0; ClearConsolePanes(); await RefreshWorldConsoles(); }

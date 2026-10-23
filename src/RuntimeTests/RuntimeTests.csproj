@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><AssemblyName>Manager.RuntimeTests</AssemblyName><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup><Compile Include="*.cs" Exclude="PluginEntry.cs"/></ItemGroup>
+  <ItemGroup Condition="'$(RuntimeCoreAssembly)' == ''"><ProjectReference Include="../Core/Core.csproj"/></ItemGroup>
+  <ItemGroup Condition="'$(RuntimeCoreAssembly)' != ''"><Reference Include="Pigeon.UTSLManager.Core"><HintPath>$(RuntimeCoreAssembly)</HintPath></Reference></ItemGroup>
+</Project>
