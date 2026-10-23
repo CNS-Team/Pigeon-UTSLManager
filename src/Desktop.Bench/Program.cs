@@ -228,6 +228,11 @@ sealed class BenchWindow : Window {
         Check("host-command-input-keeps-carriage-return-contract",backend.Commands.Any(c=>c.Action=="send"&&c.Value=="host-command 中文\r"));
         metrics.Text="离线命令、ANSI/中文、宿主与三世界隔离、历史上限及 latest-only 验证完成；真实游戏 /help = UNVERIFIED。";
         await Snapshot("host-command-and-history");
+        foreach(var view in views)view.Session=null;
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        Check("cleared-view-releases-formatted-text-and-brush-caches",views.All(v=>
+            ((System.Collections.ICollection)typeof(TerminalView).GetField("drawing",flags)!.GetValue(v)!).Count==0&&
+            ((System.Collections.ICollection)typeof(TerminalView).GetField("colors",flags)!.GetValue(v)!).Count==0));
     }
     public async Task<int> Run() {
         try {
@@ -241,7 +246,7 @@ sealed class BenchWindow : Window {
             paint.Stop();collector?.Dispose();backend?.Dispose();
             await File.WriteAllLinesAsync(Path.Combine(output,"samples.jsonl"),trace);
             Json.Save(Path.Combine(output,"result.json"),new {variant,passed=checks.Count-failures,failed=failures,samples,checks,semantics,
-                framework="Avalonia 12.1.2 + VtNetCore 1.0.30 + actual custom TerminalView/ConsoleCollector source snapshot",
+                framework="Avalonia 12.1.2 + exact frozen VtNetCore DLL + actual custom TerminalView/ConsoleCollector source snapshot",
                 rendering="Software renderer in a native Avalonia window; counters are draw-loop calls, not display scanout/GPU present events",
                 timing="10ms DispatcherTimer, from local fixture /help send to final marker recorded after the actual TerminalView draw loop; screenshot capture excluded",
                 fixture="Local named pipe replays preserved ANSI help-equivalent text; no real Host process/server or game client",realServerHelp="UNVERIFIED",productionTouched=false});

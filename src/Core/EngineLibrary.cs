@@ -22,15 +22,19 @@ public sealed class EngineLibrary(Workspace workspace) {
     public static bool IsCodeDirectory(string name) => CodeDirectories.Contains(name);
     public static bool IsCodeFile(string name) => new[] { ".dll", ".exe", ".pdb", ".so", ".dylib", ".deps.json", ".runtimeconfig.json", ".runtimeconfig.dev.json" }
         .Any(suffix => name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+    // FNA's saves are data even though their parent is called lib. Never hash,
+    // share or hard-link saved worlds as immutable engine code.
+    public static bool IsEngineDataPath(string path) => path.Replace('\\', '/').Equals("lib/Saves", StringComparison.OrdinalIgnoreCase)
+        || path.Replace('\\', '/').StartsWith("lib/Saves/", StringComparison.OrdinalIgnoreCase);
     string Store {
         get {
-            string path = Workspace.Under(workspace.Root, "Core/.store");
+            string path = Workspace.Under(workspace.Root, "Core/Engines");
             Directory.CreateDirectory(path); return path;
         }
     }
-    public EngineArtifact[] Catalog() => Directory.GetDirectories(Store)
-        .Where(d => !Path.GetFileName(d).StartsWith('.'))
-        .Select(d => Read(Path.GetFileName(d), verifyFiles: false).Artifact)
+    ReadableLibrary Objects => new(Store);
+    public EngineArtifact[] Catalog() => Objects.Entries()
+        .Select(e => Read(e.Key, verifyFiles: false).Artifact)
         .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Revision, StringComparer.Ordinal).ToArray();
 
     public EngineArtifact Resolve(string revision) => Read(revision, verifyFiles: true).Artifact;
@@ -44,7 +48,8 @@ public sealed class EngineLibrary(Workspace workspace) {
         Json.Encode(new { manifest.Executable, Files = manifest.Files.OrderBy(f => f.Path, StringComparer.Ordinal).ToArray() }))));
     (EngineArtifact Artifact, EngineManifest Manifest) Read(string revision, bool verifyFiles) {
         ValidateRevision(revision);
-        string directory = Workspace.Under(Store, revision);
+        string? entry = Objects.Find(revision);
+        string directory = entry != null ? Path.GetDirectoryName(entry)! : Workspace.Under(workspace.Root, "Core/.store/" + revision);
         string manifestPath = Workspace.Under(directory, "engine-manifest.json");
         var manifest = Json.Decode<EngineManifest>(File.ReadAllText(manifestPath));
         if (manifest.Revision != revision || Revision(manifest) != revision || manifest.Files.Length == 0)
@@ -61,7 +66,7 @@ public sealed class EngineLibrary(Workspace workspace) {
                 : IsCodeDirectory(components[0]) || (components.Length >= 3
                     && components[0].Equals("Core", StringComparison.OrdinalIgnoreCase)
                     && CoreCodeDirectories.Contains(components[1]));
-            if (!code)
+            if (!code || IsEngineDataPath(file.Path))
                 throw new IOException("核心版本清单包含非代码路径：" + file.Path);
             if (file.Bytes < 0 || file.Sha256.Length != 64 || file.Sha256.Any(c => !char.IsAsciiHexDigit(c)))
                 throw new IOException("核心版本文件记录无效");
@@ -78,15 +83,16 @@ public sealed class EngineLibrary(Workspace workspace) {
         return (new(revision, manifest.Name, manifest.Version, manifest.Files.Sum(f => f.Bytes), manifest.Files.Length, directory), manifest);
     }
 
-    public EngineArtifact Import(ServerProfile profile) {
-        string source = workspace.ServerDirectory(profile);
-        string executable = workspace.ServerExecutable(profile);
+    public EngineArtifact Import(ServerProfile profile, string? codeSource = null) {
+        string source = codeSource is null ? workspace.ServerDirectory(profile) : Path.GetFullPath(codeSource);
+        Workspace.EnsureNoLinks(source);
+        string executable = Workspace.Under(source, profile.Executable);
         if (!File.Exists(executable)) throw new IOException("原服核心启动程序不存在");
         var paths = new List<string>();
         foreach (string file in Directory.GetFiles(source)) if (IsCodeFile(Path.GetFileName(file))) { Workspace.EnsureNoLinks(file); paths.Add(file); }
         foreach (string directory in Directory.GetDirectories(source)) {
             string directoryName = Path.GetFileName(directory);
-            if (IsCodeDirectory(directoryName)) paths.AddRange(Enumerate(directory));
+            if (IsCodeDirectory(directoryName)) paths.AddRange(EnumerateCode(directory, source));
             else if (directoryName.Equals("Core", StringComparison.OrdinalIgnoreCase)) {
                 Workspace.EnsureNoLinks(directory);
                 foreach (string child in Directory.GetDirectories(directory))
@@ -103,25 +109,32 @@ public sealed class EngineLibrary(Workspace workspace) {
         }
         var pending = new EngineManifest("", name, version, profile.Executable, files);
         string revision = Revision(pending);
-        if (Directory.Exists(Workspace.Under(Store, revision))) return Resolve(revision);
-        string stage = Workspace.Under(Store, ".stage-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(stage);
+        if (Objects.Find(revision) is { } known && File.Exists(known)) return Resolve(revision);
+        string finalManifest = Objects.Reserve(revision, name + "-" + profile.Folder, "engine-manifest.json");
+        string stage = Path.GetDirectoryName(finalManifest)!;
         try {
             foreach (var file in files) {
                 string original = Workspace.Under(source, file.Path);
                 string target = Workspace.Under(stage, file.Path); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Copy(original, target, false);
+                if (!File.Exists(target)) File.Copy(original, target, false);
                 if (new FileInfo(target).Length != file.Bytes || Hashes.FileSha(target) != file.Sha256 || Hashes.FileSha(original) != file.Sha256)
                     throw new IOException("收录过程中核心输入变化：" + file.Path);
             }
             Json.Save(Path.Combine(stage, "engine-manifest.json"), pending with { Revision = revision });
-            string final = Workspace.Under(Store, revision);
-            try { Directory.Move(stage, final); }
-            catch (IOException) when (Directory.Exists(final)) { return Resolve(revision); }
             var artifact = Resolve(revision);
             workspace.Audit("engine-import", profile.Id, new { artifact.Revision, artifact.Bytes, artifact.FileCount, source });
             return artifact;
         } catch {
             workspace.Audit("engine-import-failed", profile.Id, new { stage, preserved = true }); throw;
+        }
+    }
+    static IEnumerable<string> EnumerateCode(string directory, string sourceRoot) {
+        Workspace.EnsureNoLinks(directory);
+        foreach (string entry in Directory.GetFileSystemEntries(directory)) {
+            if (IsEngineDataPath(Path.GetRelativePath(sourceRoot, entry))) continue;
+            Workspace.EnsureNoLinks(entry);
+            if (Directory.Exists(entry)) foreach (string child in EnumerateCode(entry, sourceRoot)) yield return child;
+            else yield return entry;
         }
     }
     static IEnumerable<string> Enumerate(string directory) {

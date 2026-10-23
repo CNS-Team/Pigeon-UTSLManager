@@ -37,26 +37,37 @@ sealed class ServerManager(Workspace workspace) {
     readonly object externalCacheSync = new();
     Dictionary<string, ProcessIdentity> externalCache = new(StringComparer.OrdinalIgnoreCase);
     long externalCacheAt;
+    string externalCacheProfiles = "";
     public ServerState[] Snapshot() {
         var profiles = workspace.Load();
-        var externalProcesses = DisplayExternal(profiles);
+        // Owned terminals already have a complete process identity. Do not scan
+        // every process/module in Windows on each UI refresh to rediscover them.
+        var owned = new Dictionary<string, ServerState>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in profiles)
+            if (sessions.TryGetValue(p.Id, out var s) && s.Terminal is { } t && t.Identity.IsCurrent()) {
+                long memory = 0; try { t.Process.Refresh(); memory = t.Process.WorkingSet64; } catch { }
+                owned[p.Id] = new(p, s.State, t.Identity, memory, s.Error, s.Launch?.Directory, s.Launch?.ManifestPath);
+            }
+        var externalProcesses = DisplayExternal(profiles.Where(p => !owned.ContainsKey(p.Id)));
         return profiles.Select(p => {
-        if (sessions.TryGetValue(p.Id, out var s) && s.Terminal is { } t && t.Identity.IsCurrent()) {
-            long memory = 0; try { t.Process.Refresh(); memory = t.Process.WorkingSet64; } catch { }
-            return new ServerState(p, s.State, t.Identity, memory, s.Error, s.Launch?.Directory, s.Launch?.ManifestPath);
-        }
-        externalProcesses.TryGetValue(p.Id, out var external);
-        // Display cache entries can outlive an exit, but may never confer ownership.
-        if (external != null && !external.IsCurrent()) external = null;
-        return new ServerState(p, external != null ? "EXTERNAL" : s?.State ?? "STOPPED", external, 0, s?.Error);
-    }).ToArray();
+            if (owned.TryGetValue(p.Id, out var current)) return current;
+            sessions.TryGetValue(p.Id, out var s);
+            externalProcesses.TryGetValue(p.Id, out var external);
+            // Display cache entries can outlive an exit, but may never confer ownership.
+            if (external != null && !external.IsCurrent()) external = null;
+            return new ServerState(p, external != null ? "EXTERNAL" : s?.State ?? "STOPPED", external, 0, s?.Error);
+        }).ToArray();
     }
     Dictionary<string, ProcessIdentity> DisplayExternal(IEnumerable<ServerProfile> profiles) {
         lock (externalCacheSync) {
-            if (externalCacheAt != 0 && Environment.TickCount64 - externalCacheAt < 900) return externalCache;
             var registered = profiles.ToArray();
+            if (registered.Length == 0) return new(StringComparer.OrdinalIgnoreCase);
+            // A different unresolved set must not reuse a cache that omitted it.
+            string key = Json.Encode(registered);
+            if (externalCacheAt != 0 && externalCacheProfiles == key && Environment.TickCount64 - externalCacheAt < 900) return externalCache;
             var found = new Dictionary<string, ProcessIdentity>(StringComparer.OrdinalIgnoreCase);
-            foreach (var proc in Process.GetProcesses()) using (proc) {
+            foreach (string name in registered.Select(p => Path.GetFileNameWithoutExtension(p.Executable)).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var proc in Process.GetProcessesByName(name)) using (proc) {
                 try {
                     string? exe = proc.MainModule?.FileName;
                     if (!proc.HasExited && exe != null) foreach (var profile in registered)
@@ -64,7 +75,7 @@ sealed class ServerManager(Workspace workspace) {
                 } catch { }
             }
             foreach (var profile in registered) if (RuntimeMarker(profile) is {} marker) found.TryAdd(profile.Id, marker);
-            externalCache = found; externalCacheAt = Environment.TickCount64; return found;
+            externalCache = found; externalCacheProfiles = key; externalCacheAt = Environment.TickCount64; return found;
         }
     }
     bool MatchesExecutable(ServerProfile profile, string executable) {
@@ -73,6 +84,11 @@ sealed class ServerManager(Workspace workspace) {
         // changes must never turn an already running generation into an orphan.
         if (profile.Id.Length == 0 || profile.Id is "." or ".." || profile.Id.EndsWith('.')
             || profile.Id.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_' or '.'))) return false;
+        string readable = workspace.RuntimeRoot(profile);
+        string[] readableParts = Path.GetRelativePath(readable, executable).Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        if (readableParts.Length >= 2 && readableParts[0].StartsWith("run-", StringComparison.Ordinal)
+            && int.TryParse(readableParts[0][4..], out int run) && run > 0
+            && string.Equals(Path.GetFullPath(Path.Combine(readable, readableParts[0], profile.Executable)), executable, StringComparison.OrdinalIgnoreCase)) return true;
         string root = Path.GetFullPath(Path.Combine(workspace.Root, "Runtime", profile.Id));
         string relative = Path.GetRelativePath(root, executable);
         string[] parts = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
@@ -81,7 +97,9 @@ sealed class ServerManager(Workspace workspace) {
     }
     ProcessIdentity? External(ServerProfile p) {
         if (RuntimeMarker(p) is {} marker) return marker;
-        foreach (var proc in Process.GetProcesses()) using (proc) {
+        // This is a fresh control-path check, not the display cache. Still match
+        // the full source/sandbox executable path, never grant ownership by name.
+        foreach (var proc in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(p.Executable))) using (proc) {
             try { if (!proc.HasExited && proc.MainModule?.FileName is {} exe && MatchesExecutable(p, exe)) return new(proc.Id, proc.StartTime.ToUniversalTime().Ticks, exe); } catch { }
         }
         return null;

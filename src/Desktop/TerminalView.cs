@@ -84,7 +84,7 @@ public sealed record TerminalSpan(string Text, string Foreground, string Backgro
 public sealed record TerminalFrame(long Revision, int TopRow, TerminalSpan[][] Lines, int ScrollOffset = 0, long ViewportVersion = 0);
 public sealed class TerminalView : Control {
     TerminalSession? session;
-    public TerminalSession? Session { get => session; set { if (ReferenceEquals(session, value)) return; session = value; scroll = 0; cachedFrame = scrollFrame = null; scrollRequest = session?.SetViewport(columns, rows, scroll) ?? 0; InvalidateVisual(); } }
+    public TerminalSession? Session { get => session; set { if (ReferenceEquals(session, value)) return; session = value; scroll = 0; cachedFrame = scrollFrame = null; drawing.Clear(); colors.Clear(); scrollRequest = session?.SetViewport(columns, rows, scroll) ?? 0; InvalidateVisual(); } }
     public Action<int,int>? ResizeTerminal;
     int scroll;
     int columns = 140, rows = 40;

@@ -8,7 +8,7 @@ var workspace = new Workspace(Path.Combine(output, "隔离管理器"));
 var results = new List<object>(); int passed = 0, failed = 0;
 void Check(string name, bool ok) { results.Add(new { name, pass = ok }); if (ok) passed++; else failed++; Console.WriteLine((ok ? "PASS " : "FAIL ") + name); }
 bool Reject(Action action) { try { action(); return false; } catch { return true; } }
-Check("root-layout", new[] { "Plugins", "Servers", "Maps", "Backups", "Data" }.All(x => Directory.Exists(Path.Combine(workspace.Root, x))));
+Check("root-layout", new[] { workspace.Library, workspace.Servers, workspace.Worlds, workspace.Backups, workspace.Data }.All(Directory.Exists));
 Check("path-traversal-rejected", Reject(() => Workspace.Under(workspace.Servers, "../escape")));
 Check("absolute-path-rejected", Reject(() => Workspace.Under(workspace.Servers, output)));
 Check("new-roster-empty-no-example-production", workspace.Load().Count == 0);

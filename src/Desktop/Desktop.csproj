@@ -1,6 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>WinExe</OutputType><AssemblyName>Pigeon.UTSLManager</AssemblyName><Title>UTSL服务器管理器</Title><Product>UTSL服务器管理器</Product><Description>UTSL多服务器管理器</Description><Version>0.1.0</Version><ApplicationIcon>../../assets/branding/UTSl-Manager.ico</ApplicationIcon></PropertyGroup>
-  <ItemGroup><PackageReference Include="Avalonia" Version="12.1.2"/><PackageReference Include="Avalonia.Desktop" Version="12.1.2"/><PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2"/><PackageReference Include="Lucide.Avalonia" Version="0.2.27"/><PackageReference Include="VtNetCore" Version="1.0.30"/></ItemGroup>
-  <ItemGroup><ProjectReference Include="../Core/Core.csproj"/><ProjectReference Include="../../external/MapStudio/src/Studio/Studio.csproj"/></ItemGroup>
+  <PropertyGroup><OutputType>WinExe</OutputType><AssemblyName>Pigeon.UTSLManager</AssemblyName><Title>UTSL服务器管理器</Title><Product>UTSL服务器管理器</Product><Description>UTSL多服务器管理器</Description><Version>0.2.0</Version><ApplicationIcon>../../assets/branding/UTSl-Manager.ico</ApplicationIcon></PropertyGroup>
+  <ItemGroup><PackageReference Include="Avalonia" Version="12.1.2"/><PackageReference Include="Avalonia.Desktop" Version="12.1.2"/><PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2"/><PackageReference Include="Lucide.Avalonia" Version="0.2.27"/></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/Core.csproj" Condition="'$(FrozenRuntimeDirectory)' == ''"/>
+    <ProjectReference Include="../../external/MapStudio/src/Studio/Studio.csproj" Condition="'$(FrozenRuntimeDirectory)' == ''"/>
+    <ProjectReference Include="../Terminal.VtNetCore/VtNetCore.csproj" Condition="'$(FrozenTerminalAssembly)' == ''"/>
+    <Reference Include="VtNetCore" Condition="'$(FrozenTerminalAssembly)' != ''"><HintPath>$(FrozenTerminalAssembly)</HintPath></Reference>
+    <Reference Include="Pigeon.UTSLManager.Core" Condition="'$(FrozenRuntimeDirectory)' != ''"><HintPath>$(FrozenRuntimeDirectory)/Pigeon.UTSLManager.Core.dll</HintPath></Reference>
+    <Reference Include="UTSL.MapStudio" Condition="'$(FrozenRuntimeDirectory)' != ''"><HintPath>$(FrozenRuntimeDirectory)/UTSL.MapStudio.dll</HintPath></Reference>
+  </ItemGroup>
+  <Target Name="RequireFrozenRuntime" BeforeTargets="ResolveReferences" Condition="'$(FrozenRuntimeDirectory)' != '' And (!Exists('$(FrozenRuntimeDirectory)/Pigeon.UTSLManager.Core.dll') Or !Exists('$(FrozenRuntimeDirectory)/UTSL.MapStudio.dll'))">
+    <Error Text="FrozenRuntimeDirectory must contain the approved Core and MapStudio DLLs."/>
+  </Target>
   <ItemGroup><AvaloniaResource Include="../../assets/branding/UTSl-Manager.ico" Link="Assets/Branding/UTSl-Manager.ico"/><AvaloniaResource Include="../../assets/branding/UTSl-Manager.png" Link="Assets/Branding/UTSl-Manager.png"/></ItemGroup>
 </Project>

@@ -3,13 +3,15 @@ param(
     [ValidatePattern('^[A-Za-z0-9-]+$')][string]$RunId = (Get-Date -Format 'yyyyMMdd-HHmmss'),
     [string]$OutputRoot,
     [string]$CoreReference,
-    [string]$TerminalCandidate
+    [string]$TerminalCandidate,
+    [string]$VtReference
 )
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $workspace = Split-Path (Split-Path $repo)
 if (!$OutputRoot) { $OutputRoot = Join-Path $workspace '_tmp_build/utsl-manager-shared-runtime-20261023/console-decision' }
 if (!$CoreReference) { $CoreReference = Join-Path $workspace '_tmp_build/utsl-manager-shared-runtime-20261023/ui-package-r3/App/manager/Pigeon.UTSLManager.Core.dll' }
+if (!$VtReference -or !(Test-Path -LiteralPath $VtReference)) { throw 'Supply the exact frozen VtReference DLL to benchmark.' }
 $run = Join-Path ([IO.Path]::GetFullPath($OutputRoot)) $RunId
 if (Test-Path -LiteralPath $run) { throw 'Run directory exists; choose a fresh RunId.' }
 $snapshot = Join-Path $run 'source'
@@ -19,7 +21,9 @@ New-Item -ItemType Directory -Path $product,$bench,(Join-Path $snapshot 'Referen
 Copy-Item -LiteralPath (Join-Path $repo 'src/Desktop/TerminalView.cs'),(Join-Path $repo 'src/Desktop/ConsoleCollector.cs') -Destination $product
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Desktop.Bench.csproj'),(Join-Path $PSScriptRoot 'Program.cs'),(Join-Path $PSScriptRoot 'Run.ps1') -Destination $bench
 Copy-Item -LiteralPath $CoreReference -Destination (Join-Path $snapshot 'Reference/Pigeon.UTSLManager.Core.dll')
+Copy-Item -LiteralPath $VtReference -Destination (Join-Path $snapshot 'Reference/VtNetCore.dll')
 $inputs = @(Join-Path $repo 'src/Desktop/TerminalView.cs'; Join-Path $repo 'src/Desktop/ConsoleCollector.cs'; Join-Path $PSScriptRoot 'Desktop.Bench.csproj'; Join-Path $PSScriptRoot 'Program.cs'; Join-Path $PSScriptRoot 'Run.ps1'; [IO.Path]::GetFullPath($CoreReference))
+$inputs += [IO.Path]::GetFullPath($VtReference)
 $manifest = foreach ($path in $inputs) { $file=Get-Item -LiteralPath $path; [pscustomobject]@{Path=$file.FullName;Bytes=$file.Length;Sha256=(Get-FileHash -LiteralPath $path).Hash} }
 $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $run 'source-manifest.json') -Encoding utf8
 if ($TerminalCandidate) {
@@ -46,11 +50,11 @@ $instrumented = $instrumented.Replace('Volatile.Write(ref frame, new(++revision,
 $instrumented = $instrumented.Replace('Volatile.Write(ref frame, new(++revision, terminal.ViewPort.TopRow, lines, Math.Max(0, terminal.ViewPort.TopRow - firstRow)));', 'Volatile.Write(ref frame, new(++revision, terminal.ViewPort.TopRow, lines, Math.Max(0, terminal.ViewPort.TopRow - firstRow))); ConsoleBenchHooks.OnApplied(this, benchApplyStart, benchParseDone, benchFrameDone);')
 $instrumented = $instrumented.Replace('Volatile.Write(ref frame, new(++revision, terminal.ViewPort.TopRow, lines, Math.Max(0, terminal.ViewPort.TopRow - firstRow), viewport.Version));', 'Volatile.Write(ref frame, new(++revision, terminal.ViewPort.TopRow, lines, Math.Max(0, terminal.ViewPort.TopRow - firstRow), viewport.Version)); ConsoleBenchHooks.OnApplied(this, benchApplyStart, benchParseDone, benchFrameDone);')
 [IO.File]::WriteAllText($terminalPath,$instrumented,[Text.UTF8Encoding]::new($false))
-$variant = if ($TerminalCandidate) { 'offline-candidate' } else { 'frozen-baseline' }
+$variant = if ($TerminalCandidate) { 'offline-terminal-candidate-with-frozen-vt' } else { 'frozen-vt-input' }
 [pscustomobject]@{variant=$variant;terminalCandidate=$TerminalCandidate;renderInstrumentation='one callback after the existing DrawText loop and Apply duration timestamps';productionTouched=$false;source=$snapshot} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $run 'run-manifest.json')
 $core = Join-Path $snapshot 'Reference/Pigeon.UTSLManager.Core.dll'
 $project = Join-Path $bench 'Desktop.Bench.csproj'
-& dotnet build $project -c Release --artifacts-path (Join-Path $run 'artifacts') -o (Join-Path $run 'bin') "-p:CoreReference=$core" --nologo *> (Join-Path $run 'build.log')
+& dotnet build $project -c Release --artifacts-path (Join-Path $run 'artifacts') -o (Join-Path $run 'bin') "-p:CoreReference=$core" "-p:VtReference=$(Join-Path $snapshot 'Reference/VtNetCore.dll')" --nologo *> (Join-Path $run 'build.log')
 if ($LASTEXITCODE -ne 0) { Get-Content -LiteralPath (Join-Path $run 'build.log') -Tail 35; exit $LASTEXITCODE }
 $start=[Diagnostics.ProcessStartInfo]::new((Join-Path $run 'bin/Pigeon.ConsoleDecision.Bench.exe'))
 $start.UseShellExecute=$false

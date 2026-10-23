@@ -45,12 +45,6 @@
           "Avalonia": "11.3.17"
         }
       },
-      "VtNetCore": {
-        "type": "Direct",
-        "requested": "[1.0.30, )",
-        "resolved": "1.0.30",
-        "contentHash": "/tRACpRcQ4ndQgkuA+sJrDdr5bqCB9KqAZ6ftv9PuRKdWjpQfZNtk3oyv58OzV2D2dh6fwNKUjW7Vqi4+TXlnQ=="
-      },
       "Avalonia.Angle.Windows.Natives": {
         "type": "Transitive",
         "resolved": "2.1.27548.20260419",
@@ -214,6 +208,9 @@
           "Avalonia.Desktop": "[12.1.2, )",
           "Avalonia.Themes.Fluent": "[12.1.2, )"
         }
+      },
+      "vtnetcore": {
+        "type": "Project"
       }
     }
   }

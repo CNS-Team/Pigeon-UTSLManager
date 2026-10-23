@@ -28,6 +28,7 @@ evidence.Write("inputs.json", new {
 });
 if (scope is "all" or "host") evidence.Require("binding/Host-and-runner-use-identical-Core", Hashes.FileSha(hostCore) == Hashes.FileSha(typeof(Workspace).Assembly.Location));
 if (scope is "all" or "runtime") await RuntimeScenarios.Run(evidence, output, package, v1, v2);
+if (scope is "all" or "runtime") await LayoutScenarios.Run(evidence, output, package, v1, v2);
 if (scope is "all" or "boundary") await BoundaryScenarios.Run(evidence, output, package, v1);
 if (scope is "all" or "host") await HostScenarios.Run(evidence, output, host, package, v1, v2);
 if ((scope is "all" or "module") && args.Length >= 9) {

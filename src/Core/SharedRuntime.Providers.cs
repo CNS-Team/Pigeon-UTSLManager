@@ -10,11 +10,12 @@ public sealed partial class SharedRuntime {
     static readonly HashSet<string> CoreCodeDirectories = new(StringComparer.OrdinalIgnoreCase) { "bin", "app", "i18n", "runtimes", "x64" };
     static bool HasCoreCode(string core) => Directory.EnumerateFileSystemEntries(core).Any(p => CoreCodeDirectories.Contains(Path.GetFileName(p)));
     static bool IsRuntimeCodePath(string relative) {
+        if (EngineLibrary.IsEngineDataPath(relative)) return false;
         string[] parts = relative.Split('/', '\\');
         return parts.Length == 1 ? EngineLibrary.IsCodeFile(parts[0]) : EngineLibrary.IsCodeDirectory(parts[0])
             || (parts.Length > 2 && parts[0].Equals("Core", StringComparison.OrdinalIgnoreCase) && CoreCodeDirectories.Contains(parts[1]));
     }
-    static void PlanCoreDirectory(string serverCore, string engineRoot, bool selectedEngine, List<CodeFile> code, List<(string Name, string Target)> persistent) {
+    void PlanCoreDirectory(string serverCore, string engineRoot, bool selectedEngine, List<CodeFile> code, List<(string Name, string Target)> persistent) {
         NoLinks(serverCore);
         foreach (string entry in Directory.EnumerateFileSystemEntries(serverCore)) {
             NoLinks(entry); string name = Path.GetFileName(entry);
@@ -30,7 +31,7 @@ public sealed partial class SharedRuntime {
                     // a whole-Core junction and cannot silently supplement a selected engine.
                     AddCodeTree(entry, relative, code);
                 } else if (PersistentDirectories.Contains(name)) {
-                    ValidatePersistentTree(entry); persistent.Add(("Core/" + name, entry));
+                    ValidatePersistentTree(entry); persistent.Add(("Core/" + name, WorldTarget(name, entry)));
                 } else throw new IOException("BLOCKED_OPEN_CORE_DIRECTORY_POLICY: " + name);
             } else if (EngineLibrary.IsCodeFile(name)) {
                 string relative = "Core/" + name;
@@ -40,7 +41,7 @@ public sealed partial class SharedRuntime {
         foreach (string name in new[] { "config", "Data", "Worlds", "world", "logs" }) {
             string relative = "Core/" + name;
             if (persistent.Any(p => p.Name.Equals(relative, StringComparison.OrdinalIgnoreCase))) continue;
-            string target = CreateDirectory(Safe(serverCore, name));
+            string target = CreateDirectory(WorldTarget(name, Safe(serverCore, name)));
             persistent.Add((relative, target));
         }
     }

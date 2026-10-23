@@ -10,7 +10,8 @@
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2"/>
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2"/>
-    <PackageReference Include="VtNetCore" Version="1.0.30"/>
+    <ProjectReference Include="../Terminal.VtNetCore/VtNetCore.csproj" Condition="'$(VtReference)' == ''"/>
+    <Reference Include="VtNetCore" Condition="'$(VtReference)' != ''"><HintPath>$(VtReference)</HintPath></Reference>
     <Reference Include="Pigeon.UTSLManager.Core"><HintPath>$(CoreReference)</HintPath></Reference>
     <Compile Include="$(TerminalSources)/TerminalView.cs" Link="Product/TerminalView.cs"/>
     <Compile Include="$(TerminalSources)/ConsoleCollector.cs" Link="Product/ConsoleCollector.cs"/>

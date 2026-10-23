@@ -5,11 +5,14 @@ namespace Pigeon.Manager;
 public sealed class Workspace {
     readonly object auditGate = new();
     public string Root { get; }
-    public string Servers => Path.Combine(Root, "Servers");
+    public string Servers => Path.Combine(Root, "Server");
+    public string Worlds => Path.Combine(Servers, "World");
+    public bool SharedWorlds => File.Exists(Path.Combine(Data, "shared-worlds.json"));
+    public string RuntimeRoot(ServerProfile profile) => Under(Path.Combine(Root, "Core", "Runtime"), profile.Folder);
     public string Library => Path.Combine(Root, "Plugins");
     public string Data => Path.Combine(Root, "Data");
     public string Backups => Path.Combine(Root, "Backups");
-    public string Maps => Path.Combine(Root, "Maps");
+    public string Maps => Worlds;
     public string App => Path.Combine(Root, "App");
     public string Pipe => "PigeonUTSL_" + Hashes.RootId(Root);
     public Workspace(string root) {
@@ -42,7 +45,11 @@ public sealed class Workspace {
             .ThenBy(p => p.Folder, StringComparer.OrdinalIgnoreCase).ToList() : [];
     public void Save(List<ServerProfile> profiles) => Json.Save(Path.Combine(Data, "servers.json"), profiles);
     public string ServerDirectory(ServerProfile profile) {
-        if(profile.ExistingDirectory is not {} existing)return Under(Servers,profile.Folder);
+        if(profile.ExistingDirectory is not {} existing) {
+            string current = Under(Servers, profile.Folder);
+            string legacy = Under(Path.Combine(Root, "Servers"), profile.Folder);
+            return !Directory.Exists(current) && Directory.Exists(legacy) ? legacy : current;
+        }
         string full=Path.GetFullPath(existing);EnsureNoLinks(full);return full;
     }
     public string ServerExecutable(ServerProfile profile) => Under(ServerDirectory(profile), profile.Executable);

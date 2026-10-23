@@ -25,7 +25,9 @@ public sealed partial class SharedRuntime(Workspace workspace) {
     sealed record CodeFile(string Path, string Source, long Bytes, string Sha256, bool Share);
     sealed record PreparedPlugin(PluginArtifact Artifact, string Source, string Destination, ModuleMetadata Metadata);
 
-    string Store => CreateDirectory(Safe(workspace.Library, ".store"));
+    string Store => CreateDirectory(Safe(workspace.Data, "Library/Plugins"));
+    ReadableLibrary PluginStore => new(Store);
+    static string PluginKey(PluginArtifact a) => a.Sha256 + "/" + a.FileName.ToUpperInvariant();
     string SelectionPath(ServerProfile profile) {
         ValidateId(profile.Id);
         return Safe(CreateDirectory(Safe(workspace.Data, "runtime-selections")), profile.Id + ".json");
@@ -46,21 +48,17 @@ public sealed partial class SharedRuntime(Workspace workspace) {
     public PluginArtifact[] Catalog() {
         lock (Gate) {
             var artifacts = new List<PluginArtifact>();
-            foreach (string path in Directory.EnumerateFileSystemEntries(Store)) {
-                NoLinks(path);
-                string hash = Path.GetFileName(path);
-                if (hash.StartsWith('.')) continue;
-                ValidateHash(hash);
-                if (!Directory.Exists(path)) throw new IOException("BLOCKED_STORE_ENTRY: " + path);
-                foreach (string file in Directory.EnumerateFileSystemEntries(path)) {
-                    NoLinks(file);
-                    if (Path.GetFileName(file).StartsWith(".import-", StringComparison.Ordinal)) continue;
-                    var artifact = Describe(file);
-                    if (artifact.Sha256 != hash) throw new IOException("BLOCKED_STORE_SHA: " + file);
-                    artifacts.Add(artifact);
-                }
+            foreach (var entry in PluginStore.Entries()) {
+                string file = PluginStore.Find(entry.Key)!;
+                var artifact = Describe(file);
+                if (PluginKey(artifact) != entry.Key) throw new IOException("BLOCKED_STORE_SHA: " + file);
+                artifacts.Add(artifact);
             }
-            foreach (string file in Directory.EnumerateFiles(workspace.Library, "*.dll")) artifacts.Add(Describe(file));
+            foreach (string file in Directory.EnumerateFiles(workspace.Library, "*.dll")) {
+                var artifact = Describe(file);
+                // Visible aliases of pinned variants must not become new module identities.
+                if (!artifacts.Any(a => a.Sha256 == artifact.Sha256 && a.Name == artifact.Name)) artifacts.Add(artifact);
+            }
             return artifacts.DistinctBy(a => (a.Sha256, a.FileName.ToUpperInvariant()))
                 .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ThenBy(a => a.Version, StringComparer.Ordinal)
                 .ThenBy(a => a.Sha256, StringComparer.Ordinal).ToArray();
@@ -90,6 +88,28 @@ public sealed partial class SharedRuntime(Workspace workspace) {
             Json.Save(path, new SelectionDocument(selection.Enabled, selection.Plugins, selection.EngineRevision, support));
         }
     }
+    // Explicit migration only: retain exact module owner/support bytes but drop
+    // the obsolete source path after the source plugin tree has been archived.
+    internal void DetachSupportToLibrary(ServerProfile profile) {
+        lock (Gate) {
+            var value = ReadSelection(profile);
+            foreach (var file in value.Support ?? []) Verify(SupportObject(file), file.Bytes, file.Sha256);
+            Json.Save(SelectionPath(profile), value with { Support = (value.Support ?? []).Select(f => f with { Source = null }).ToArray() });
+        }
+    }
+    internal void MigrateLegacySupport() {
+        lock (Gate) {
+            string old = Safe(workspace.Library, ".module-support");
+            if (!Directory.Exists(old)) return;
+            foreach (string path in Directory.GetFiles(old, "*.json")) {
+                NoLinks(path);
+                var binding = Json.Decode<SupportBinding>(File.ReadAllText(path));
+                if (Path.GetFileNameWithoutExtension(path) != binding.OwnerSha256) throw new IOException("BLOCKED_LEGACY_BINDING_OWNER");
+                foreach (var file in binding.Files) Verify(SupportObject(file), file.Bytes, file.Sha256);
+                BindingPath(binding.OwnerSha256);
+            }
+        }
+    }
     public RuntimeLaunch Prepare(ServerProfile profile) {
         lock (Gate) {
             ValidateId(profile.Id);
@@ -100,8 +120,9 @@ public sealed partial class SharedRuntime(Workspace workspace) {
             string originalExe = Safe(source, profile.Executable);
             if (!selection.Enabled) return new(source, originalExe, "", "");
             string generation = Guid.NewGuid().ToString("N");
-            string directory = CreateDirectory(Safe(CreateDirectory(Safe(workspace.Root, "Runtime")), profile.Id));
-            directory = Safe(directory, generation);
+            string parent = workspace.RuntimeRoot(profile); CreateDirectory(parent);
+            int run = 1; string directory;
+            do { directory = Safe(parent, "run-" + run++.ToString("D4")); } while (Directory.Exists(directory));
             Directory.CreateDirectory(directory);
             try {
                 var plugins = PlanPlugins(selection.Plugins);
@@ -133,10 +154,16 @@ public sealed partial class SharedRuntime(Workspace workspace) {
                         if (name.Equals("Core", StringComparison.OrdinalIgnoreCase) && (HasCoreCode(entry) || code.Any(f => f.Path.StartsWith("Core/", StringComparison.OrdinalIgnoreCase)))) {
                             PlanCoreDirectory(entry, engineRoot, selection.EngineRevision is not null, code, persistent);
                         } else if (EngineLibrary.IsCodeDirectory(name)) {
+                            if (name.Equals("lib", StringComparison.OrdinalIgnoreCase) && Directory.Exists(Safe(source, "lib/Saves"))) {
+                                string saves = Safe(source, "lib/Saves"); ValidatePersistentTree(saves);
+                                if (workspace.SharedWorlds && Directory.EnumerateFileSystemEntries(saves).Any())
+                                    throw new IOException("BLOCKED_LEGACY_ENGINE_SAVES_RECONCILIATION_REQUIRED");
+                                if (!workspace.SharedWorlds) persistent.Add(("lib/Saves", saves));
+                            }
                             if (selection.EngineRevision is null) AddCodeTree(entry, name, code);
                         } else if (PersistentDirectories.Contains(name)) {
                             ValidatePersistentTree(entry);
-                            persistent.Add((name, entry));
+                            persistent.Add((name, WorldTarget(name, entry)));
                         } else throw new IOException("BLOCKED_OPEN_ROOT_DIRECTORY_POLICY: " + name);
                     } else if (EngineLibrary.IsCodeFile(name)) {
                         if (selection.EngineRevision is null) code.Add(InspectCode(entry, name));
@@ -149,11 +176,12 @@ public sealed partial class SharedRuntime(Workspace workspace) {
                 foreach (string name in PersistentDirectories) {
                     if (name.Equals("Core", StringComparison.OrdinalIgnoreCase) && code.Any(f => f.Path.StartsWith("Core/", StringComparison.OrdinalIgnoreCase))) continue;
                     if (persistent.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) continue;
-                    string target = Safe(source, name);
+                    string target = WorldTarget(name, Safe(source, name));
                     CreateDirectory(target);
                     persistent.Add((name, target));
                 }
                 var configPathChecks = ValidatePersistentConfigPaths(source);
+                if (workspace.SharedWorlds) persistent.Add(("lib/Saves/Worlds", workspace.Worlds));
                 ValidateDynamicProviders(plugins, selection, code);
                 if (!code.Any(f => f.Path.Equals(profile.Executable, StringComparison.OrdinalIgnoreCase)))
                     throw new IOException("BLOCKED_MISSING_EXECUTABLE: " + profile.Executable);
@@ -169,6 +197,7 @@ public sealed partial class SharedRuntime(Workspace workspace) {
                 var mappings = new List<RuntimeMapping>();
                 foreach (var item in persistent) {
                     string link = Safe(directory, item.Name);
+                    CreateDirectory(Path.GetDirectoryName(link)!);
                     CreateJunction(link, item.Target);
                     mappings.Add(new(item.Name, item.Target, "junction-server-persistent"));
                 }
@@ -187,6 +216,13 @@ public sealed partial class SharedRuntime(Workspace workspace) {
                 throw new IOException("Runtime 准备被阻断；保留诊断：" + diagnostic + "；" + error.Message, error);
             }
         }
+    }
+    string WorldTarget(string name, string original) {
+        if (!workspace.SharedWorlds || !(name.Equals("Worlds", StringComparison.OrdinalIgnoreCase) || name.Equals("world", StringComparison.OrdinalIgnoreCase))) return original;
+        if (Directory.Exists(original) && Directory.EnumerateFileSystemEntries(original).Any())
+            throw new IOException("BLOCKED_WORLD_MIGRATION_REQUIRED: " + original);
+        ValidatePersistentTree(workspace.Worlds);
+        return workspace.Worlds;
     }
     static void ValidateId(string id) {
         ValidateLeaf(id);
@@ -247,7 +283,7 @@ public sealed partial class SharedRuntime(Workspace workspace) {
         ValidateSelection([result]); return result;
     }
     string Publish(string source, PluginArtifact artifact) {
-        string destination = Safe(CreateDirectory(Safe(Store, artifact.Sha256)), artifact.FileName);
+        string destination = PluginStore.Reserve(PluginKey(artifact), artifact.Name + "-" + artifact.Version, artifact.FileName);
         if (!File.Exists(destination)) {
             string temp = Safe(Path.GetDirectoryName(destination)!, ".import-" + Guid.NewGuid().ToString("N"));
             try {
@@ -257,15 +293,26 @@ public sealed partial class SharedRuntime(Workspace workspace) {
             } finally { if (File.Exists(temp)) File.Delete(temp); }
         }
         if (Describe(destination) != artifact) throw new IOException("BLOCKED_ARTIFACT_METADATA_OR_SHA: " + destination);
+        // A TSM-style visible library: DLLs only, with readable variant names.
+        string visible = Safe(workspace.Library, artifact.FileName);
+        int variant = 1;
+        while (File.Exists(visible) && Hashes.FileSha(visible) != artifact.Sha256)
+            visible = Safe(workspace.Library, Path.GetFileNameWithoutExtension(artifact.FileName) + "-variant-" + variant++.ToString("D2") + ".dll");
+        if (!File.Exists(visible)) {
+            if (!(OperatingSystem.IsWindows() && CreateHardLinkW(visible, destination, IntPtr.Zero))) CopyVerified(destination, visible, artifact.Bytes, artifact.Sha256);
+            Verify(visible, artifact.Bytes, artifact.Sha256);
+        }
         return destination;
     }
     string ResolvePlugin(PluginArtifact artifact) {
         ValidateSelection([artifact]);
-        string destination = Safe(Store, artifact.Sha256 + "/" + artifact.FileName);
-        if (File.Exists(destination)) {
+        string? destination = PluginStore.Find(PluginKey(artifact));
+        if (destination != null && File.Exists(destination)) {
             if (Describe(destination) != artifact) throw new IOException("BLOCKED_ARTIFACT_METADATA_OR_SHA: " + destination);
             return destination;
         }
+        string old = Safe(workspace.Library, ".store/" + artifact.Sha256 + "/" + artifact.FileName);
+        if (File.Exists(old)) { if (Describe(old) != artifact) throw new IOException("BLOCKED_LEGACY_PLUGIN_SHA"); return Publish(old, artifact); }
         string legacy = Safe(workspace.Library, artifact.FileName);
         if (!File.Exists(legacy) || Describe(legacy) != artifact) throw new IOException("BLOCKED_ARTIFACT_MISSING: " + artifact.FileName);
         return Publish(legacy, artifact);
@@ -274,8 +321,9 @@ public sealed partial class SharedRuntime(Workspace workspace) {
     static void AddCodeTree(string directory, string relative, List<CodeFile> code) {
         NoLinks(directory);
         foreach (string item in Directory.EnumerateFileSystemEntries(directory)) {
-            NoLinks(item);
             string path = relative + "/" + Path.GetFileName(item);
+            if (EngineLibrary.IsEngineDataPath(path)) continue;
+            NoLinks(item);
             ValidateRelative(path);
             if (Directory.Exists(item)) AddCodeTree(item, path, code); else code.Add(InspectCode(item, path));
         }

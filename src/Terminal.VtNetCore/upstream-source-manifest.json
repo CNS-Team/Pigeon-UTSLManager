@@ -1,0 +1,246 @@
+{
+  "repository": "https://github.com/darrenstarr/VtNetCore",
+  "commit": "39237314c5e6e90be6a0a0cfa29e1f2caa8d1775",
+  "files": [
+    {
+      "path": "Exceptions/EscapeSequenceException.cs",
+      "bytes": 1629,
+      "sha256": "2D1116C5D964A6F876EAA7FBB279EE6B2D4F95D9BB621F7A504DED2E778CB54C"
+    },
+    {
+      "path": "Resources/AdditionalAssemblyInformation.cs",
+      "bytes": 99,
+      "sha256": "C36E2F812B365B40FCC524F1D8B8C8E9BEA6384165CC39352FC2E912BF82BD23"
+    },
+    {
+      "path": "VirtualTerminal/Encodings/Iso2022Encoding.cs",
+      "bytes": 14556,
+      "sha256": "8BD46CC5CA7DB955E085C172C2BA4D3762F8B648F6052BECCB623D1F312C17E5"
+    },
+    {
+      "path": "VirtualTerminal/Enums/EActiveBuffer.cs",
+      "bytes": 135,
+      "sha256": "ED9FBC7CCD8767DCD59EFF52B46550BA111B243E728782FB53711DD85DB342D0"
+    },
+    {
+      "path": "VirtualTerminal/Enums/ECharacterSet.cs",
+      "bytes": 462,
+      "sha256": "800BB954353839FC46BB36EE356F7590E6E345003F63B288DAA7E4602BBB693F"
+    },
+    {
+      "path": "VirtualTerminal/Enums/ECharacterSetMode.cs",
+      "bytes": 235,
+      "sha256": "0EC3B1F41208744AB8598FA7D227CFA358FD6249B5C22307751CF09794579A7A"
+    },
+    {
+      "path": "VirtualTerminal/Enums/ECharacterSize.cs",
+      "bytes": 242,
+      "sha256": "7CDE6F159D24940121761A1A01D6DF60CABDC751B3AF534524AB09D9238FC93A"
+    },
+    {
+      "path": "VirtualTerminal/Enums/ECursorShape.cs",
+      "bytes": 145,
+      "sha256": "AEA1BBF07A92D88BFA493CE679E7AB4597FCF6825EEDB23B6325C0A93FA25E6F"
+    },
+    {
+      "path": "VirtualTerminal/Enums/EInsertReplaceMode.cs",
+      "bytes": 136,
+      "sha256": "A2A2639D08C541BD971E63B1F3F5C653B191477726E44192525CC84BC7756C95"
+    },
+    {
+      "path": "VirtualTerminal/Enums/EKeypadType.cs",
+      "bytes": 134,
+      "sha256": "CDBF45236C4989424C16226C4B0EAA0A655E13A99A8A60B8E7FF52D37A01A4C6"
+    },
+    {
+      "path": "VirtualTerminal/Enums/ETerminalColor.cs",
+      "bytes": 262,
+      "sha256": "079C72E4925FD4828D225D3E32B3EB81332779223E4073A44D0A30828A76BE1C"
+    },
+    {
+      "path": "VirtualTerminal/Enums/XTermReportType.cs",
+      "bytes": 373,
+      "sha256": "A5DB975CFDB9F45EFBF2D285706EFF0A7F6F74DBBE8E38657D73CD2DADC50502"
+    },
+    {
+      "path": "VirtualTerminal/IVirtualTerminalController.cs",
+      "bytes": 6723,
+      "sha256": "CB43F826DD07E3A3AB82934A48DA9CEF62F5C6D0C3E08E46C1C3C46934BAB639"
+    },
+    {
+      "path": "VirtualTerminal/KeyboardTranslation.cs",
+      "bytes": 910,
+      "sha256": "6C04F02848006574AC4F0553B8C97F1A1AB9D8C19DB8A4AFC638850F30360C43"
+    },
+    {
+      "path": "VirtualTerminal/KeyboardTranslations.cs",
+      "bytes": 11689,
+      "sha256": "7BF73D777071A22D99952E777B7D316A7DF74A34FA4D9BDB898A18500281EA1A"
+    },
+    {
+      "path": "VirtualTerminal/Layout/LayoutRow.cs",
+      "bytes": 461,
+      "sha256": "EA6B0D56D7F51725E8788E75300EF1092838267FDE7E1B68EF331FFC75449206"
+    },
+    {
+      "path": "VirtualTerminal/Layout/LayoutSpan.cs",
+      "bytes": 537,
+      "sha256": "0234A22DE767DBE546AED9CBF7EB9BEF0F5C6B437F7BC5B29B3C00D4FBFFC146"
+    },
+    {
+      "path": "VirtualTerminal/Model/TerminalAttribute.cs",
+      "bytes": 10698,
+      "sha256": "B58D402A7905F57D1D884FD28E6201E7505AF11C9F1EF078725503665EAB0D7C"
+    },
+    {
+      "path": "VirtualTerminal/Model/TerminalCharacter.cs",
+      "bytes": 1146,
+      "sha256": "23812ACD0B73B442BA0EFF9A0BB82F4043D88F17DEC48C3C305A56B0191857A8"
+    },
+    {
+      "path": "VirtualTerminal/Model/TerminalColor.cs",
+      "bytes": 22977,
+      "sha256": "58E393E9C10DDAACCF7681A2BA597D2026EE4D21A040372259CE0971B1F7E203"
+    },
+    {
+      "path": "VirtualTerminal/Model/TerminalLine.cs",
+      "bytes": 950,
+      "sha256": "43ABA643B5002E2CB56F587DBED6042C1B009E312A8BF35FCE405C1DF6CF9A56"
+    },
+    {
+      "path": "VirtualTerminal/Model/TerminalLines.cs",
+      "bytes": 253,
+      "sha256": "9A90B80A6CEC5C5D001D1D5C9823D35263E68E4965B56A37A21C4496C334D6E9"
+    },
+    {
+      "path": "VirtualTerminal/SendDataEventArgs.cs",
+      "bytes": 586,
+      "sha256": "E8136F827E65D457A328CA537DCFC4DB23F995F2890D78D4F6DC758AE3394E46"
+    },
+    {
+      "path": "VirtualTerminal/SizeEventArgs.cs",
+      "bytes": 257,
+      "sha256": "A88051D2F11236EB7E0AEFD5254EBCEAD9C49DE3E627B0F109711FAA870F4A59"
+    },
+    {
+      "path": "VirtualTerminal/TerminalCursorState.cs",
+      "bytes": 9405,
+      "sha256": "B6290842EEB621A991516B7F36674CC451F60D7C724EBB2AA6F632CACDBB4361"
+    },
+    {
+      "path": "VirtualTerminal/TextEventArgs.cs",
+      "bytes": 218,
+      "sha256": "C68043EFBCA1D3E18B0A50FBB4B027CA59D0A94C487B229371F33970D10A3508"
+    },
+    {
+      "path": "VirtualTerminal/TextPosition.cs",
+      "bytes": 4212,
+      "sha256": "3C37602FBCC9FFD07FF37919BB77DB5FF375615AA4E8685ABCAECA577912753F"
+    },
+    {
+      "path": "VirtualTerminal/TextRange.cs",
+      "bytes": 3245,
+      "sha256": "05F111CA040543CBF5AD4F22A8E619F47286F2739E2E5138E338978AC05E0A32"
+    },
+    {
+      "path": "VirtualTerminal/VirtualTerminalController.cs",
+      "bytes": 130829,
+      "sha256": "1D713FAD9502D49E30552838976C95ED4F81586493DC4F8FFD3BEFB1BE4D57F2"
+    },
+    {
+      "path": "VirtualTerminal/VirtualTerminalViewPort.cs",
+      "bytes": 4169,
+      "sha256": "CE911C144BFFBD380416560891DE12746469E4E91853E170AFC3D91400A3152F"
+    },
+    {
+      "path": "XTermParser/DataConsumer.cs",
+      "bytes": 4495,
+      "sha256": "2575B2095ECDE129A6E232CCFBD256EEE1E74A71326DF84D826F03FF79FF885E"
+    },
+    {
+      "path": "XTermParser/SequenceHandler.cs",
+      "bytes": 1752,
+      "sha256": "27AAEBD7697822467B798E51A778C6B22BA5CA535328BB6D07C2B1C03A57E4FB"
+    },
+    {
+      "path": "XTermParser/SequenceType/CharacterSequence.cs",
+      "bytes": 342,
+      "sha256": "9262202C89EDC9B1C866280DA3CDFCE1F11AC6274C35501C65CA03B00886E745"
+    },
+    {
+      "path": "XTermParser/SequenceType/CharacterSetSequence.cs",
+      "bytes": 441,
+      "sha256": "D919FA3F3D015F49C0C4DA6EE2E882885A4BFE15E1D938C508CE3CD1EE019114"
+    },
+    {
+      "path": "XTermParser/SequenceType/CharacterSizeSequence.cs",
+      "bytes": 348,
+      "sha256": "D45949D168E65531B2E58D4786B8381D26AB378AC7C3158AC193C72727412CF5"
+    },
+    {
+      "path": "XTermParser/SequenceType/ComplianceSequence.cs",
+      "bytes": 245,
+      "sha256": "F1CB69EFD74FE141CFC75FD8C5BD3357E509A64AB171BCA1EAA7881E7BBEEC84"
+    },
+    {
+      "path": "XTermParser/SequenceType/CsiSequence.cs",
+      "bytes": 231,
+      "sha256": "61FE2F8F5A3E250CEF3E4BCB4658E40155F19B52C0E1B198D105B8C600CCA7BF"
+    },
+    {
+      "path": "XTermParser/SequenceType/DcsSequence.cs",
+      "bytes": 231,
+      "sha256": "6762636498783F07F094B9623BDB5BB03157DEBA752E14C06ECF465D8CA50B83"
+    },
+    {
+      "path": "XTermParser/SequenceType/EscapeSequence.cs",
+      "bytes": 234,
+      "sha256": "9A0FC31254380CE7BFCD9E31BF4C49E3BEE4C8A2348C185C381974622034A25A"
+    },
+    {
+      "path": "XTermParser/SequenceType/OscSequence.cs",
+      "bytes": 231,
+      "sha256": "624A2A078DFB75A914C29F0F28F92476E4F3BA324E179EEC71AD68307B408E0B"
+    },
+    {
+      "path": "XTermParser/SequenceType/SS2Sequence.cs",
+      "bytes": 224,
+      "sha256": "727872DFA5477AACA2E776A9B9F92A9870EA01B6E60CB32D39F7C5330CA9B8AD"
+    },
+    {
+      "path": "XTermParser/SequenceType/SS3Sequence.cs",
+      "bytes": 231,
+      "sha256": "8F8F3EAD39F164FCE1EDC5B20E58CA8261F6E055BADA555E8360150630A08EEA"
+    },
+    {
+      "path": "XTermParser/SequenceType/TerminalSequence.cs",
+      "bytes": 1109,
+      "sha256": "570D9684042FC7FE0D7E940A4E2BB9D5B7F788F2DDDEF85B08D8C66DC68DA6A4"
+    },
+    {
+      "path": "XTermParser/SequenceType/UnicodeSequence.cs",
+      "bytes": 237,
+      "sha256": "FEBF77063FD49DFDECB3A8628E9848920862645F25488754223EB73A90647275"
+    },
+    {
+      "path": "XTermParser/SequenceType/Vt52MoveCursorSequence.cs",
+      "bytes": 368,
+      "sha256": "4189C918691D4C1A26E08211EBC1385CB24F63397F6AE60723004AE8A042A7ED"
+    },
+    {
+      "path": "XTermParser/XTermInputBuffer.cs",
+      "bytes": 5467,
+      "sha256": "CC6126D7AAFD2F78DC3D4AC3F7497008C773A3F4A116B4C4D66DA39E49B687D1"
+    },
+    {
+      "path": "XTermParser/XTermSequenceHandlers.cs",
+      "bytes": 91061,
+      "sha256": "201017A4D76B3EF958B97ACD6F658704B8885A04AFD4EC59C6CF73F42764CBE3"
+    },
+    {
+      "path": "XTermParser/XTermSequenceReader.cs",
+      "bytes": 22265,
+      "sha256": "D5912A097D5DAE5DC2E85FAC15032133972125B4B85D30324E38877DFCD40229"
+    }
+  ]
+}

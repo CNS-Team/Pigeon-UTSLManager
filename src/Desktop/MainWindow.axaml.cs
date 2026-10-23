@@ -6,6 +6,8 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using MapStudio;
@@ -26,6 +28,7 @@ public sealed partial class MainWindow : Window {
         InitializeComponent(); workspace = new(Program.Root);
         client = new(workspace, Path.Combine(workspace.App, "host", "Pigeon.UTSLManager.Host.exe"));
         StatusText.Text = workspace.Root;
+        VersionText.Text = $"流光工作室  ·  Pigeon-X  ·  {DisplayVersion}";
         StartButton.IsEnabled = StartAllButton.IsEnabled = StopButton.IsEnabled = StopAllButton.IsEnabled = RestartButton.IsEnabled = ProfileButton.IsEnabled = ServerFolderButton.IsEnabled = false;
         CreateConsolePanes();
         StartConsoleCollector();
@@ -168,7 +171,59 @@ public sealed partial class MainWindow : Window {
         for(var current=e.Source as StyledElement;current!=null;current=current.Parent)if(current is Button)return;
         if(e.GetCurrentPoint(this).Properties.IsLeftButtonPressed){if(e.ClickCount==2)MaxClick(s,e);else BeginMoveDrag(e);}
     }
-    async void AboutClick(object? s,RoutedEventArgs e)=>await Notice("关于","UTSL服务器管理器 0.1\n开发团队：流光工作室\n署名：流光-Pigeon-X\n地图工坊：CNS-Team/UTSL-MapStudio\n参考：CNS-Team/PGame-TSManager\nGPL-3.0；第三方组件保留原有许可。");
+    static string DisplayVersion {
+        get {
+            var version = typeof(MainWindow).Assembly.GetName().Version;
+            return version == null ? "0.2" : $"{version.Major}.{version.Minor}";
+        }
+    }
+    async void AboutClick(object? s,RoutedEventArgs e) {
+        var panel = new StackPanel { Margin = new Thickness(26), Spacing = 16 };
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("56,*") };
+        var icon = new Border {
+            Width = 50, Height = 50, CornerRadius = new CornerRadius(12),
+            Background = Brush.Parse("#2D3040"), ClipToBounds = true,
+            Child = new Image {
+                Source = new Bitmap(AssetLoader.Open(new Uri("avares://Pigeon.UTSLManager/Assets/Branding/UTSl-Manager.png"))),
+                Stretch = Stretch.UniformToFill
+            }
+        };
+        header.Children.Add(icon);
+        var heading = new StackPanel { Spacing = 5, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+        heading.Children.Add(new TextBlock { Text = "UTSL 服务器管理器", FontSize = 20, FontWeight = FontWeight.SemiBold });
+        var versionLine = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 9 };
+        versionLine.Children.Add(new Border {
+            Background = Brush.Parse("#2C3850"), CornerRadius = new CornerRadius(10), Padding = new Thickness(9, 2),
+            Child = new TextBlock { Text = "v" + DisplayVersion, FontSize = 11, Foreground = Brush.Parse("#AFC7FF") }
+        });
+        versionLine.Children.Add(new TextBlock { Text = "多服务器运行与地图工坊集成", FontSize = 11, Foreground = Brush.Parse("#8F93A2"), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+        heading.Children.Add(versionLine);
+        Grid.SetColumn(heading, 1);
+        header.Children.Add(heading);
+        panel.Children.Add(header);
+        panel.Children.Add(new Border { Height = 1, Background = Brush.Parse("#393B45") });
+        var details = new StackPanel { Spacing = 10 };
+        void Row(string label, string value) {
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("92,*") };
+            row.Children.Add(new TextBlock { Text = label, FontSize = 11, Foreground = Brush.Parse("#8F93A2"), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+            var text = new TextBlock { Text = value, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+            Grid.SetColumn(text, 1);
+            row.Children.Add(text);
+            details.Children.Add(row);
+        }
+        Row("开发团队", "流光工作室");
+        Row("作者", "流光-Pigeon-X");
+        Row("地图工坊", "CNS-Team/UTSL-MapStudio");
+        Row("参考项目", "CNS-Team/PGame-TSManager");
+        Row("许可证", "GPL-3.0；第三方组件保留原有许可");
+        panel.Children.Add(details);
+        var close = new Button { Content = "关闭", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, MinWidth = 82 };
+        close.Classes.Add("primary");
+        panel.Children.Add(close);
+        var window = Dialog("关于", panel, 560);
+        close.Click += (_, _) => window.Close();
+        await window.ShowDialog(this);
+    }
     Window Dialog(string title,Control content,double width=500)=>new(){Title=title,Content=content,Width=width,SizeToContent=SizeToContent.Height,CanResize=false,WindowStartupLocation=WindowStartupLocation.CenterOwner,Icon=Icon,Background=Brush.Parse("#222329")};
     async Task<bool> Confirm(string title,string message){bool result=false;var panel=new StackPanel{Margin=new(25),Spacing=18};panel.Children.Add(new TextBlock{Text=message,TextWrapping=TextWrapping.Wrap});var buttons=new StackPanel{Orientation=Avalonia.Layout.Orientation.Horizontal,Spacing=9,HorizontalAlignment=Avalonia.Layout.HorizontalAlignment.Right};var no=new Button{Content="取消"};var yes=new Button{Content="确认"};yes.Classes.Add("primary");buttons.Children.Add(no);buttons.Children.Add(yes);panel.Children.Add(buttons);var w=Dialog(title,panel,590);no.Click+=(_,_)=>w.Close();yes.Click+=(_,_)=>{result=true;w.Close();};await w.ShowDialog(this);return result;}
     async Task Notice(string title,string message){var panel=new StackPanel{Margin=new(25),Spacing=18};panel.Children.Add(new TextBlock{Text=message,TextWrapping=TextWrapping.Wrap});var close=new Button{Content="关闭",HorizontalAlignment=Avalonia.Layout.HorizontalAlignment.Right};panel.Children.Add(close);var w=Dialog(title,panel,590);close.Click+=(_,_)=>w.Close();await w.ShowDialog(this);}

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><AssemblyName>Pigeon.Terminal.MemoryTests</AssemblyName></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.2"/>
+    <Reference Include="Pigeon.UTSLManager.Core"><HintPath>$(CoreReference)</HintPath></Reference>
+    <Reference Include="VtNetCore"><HintPath>$(VtReference)</HintPath></Reference>
+    <Compile Include="../Desktop/TerminalView.cs" Link="Product/TerminalView.cs"/>
+  </ItemGroup>
+  <Target Name="RequireFrozenInputs" BeforeTargets="ResolveReferences" Condition="!Exists('$(CoreReference)') Or !Exists('$(VtReference)')">
+    <Error Text="Supply frozen CoreReference and VtReference DLLs."/>
+  </Target>
+</Project>

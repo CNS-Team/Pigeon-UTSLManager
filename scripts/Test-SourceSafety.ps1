@@ -56,6 +56,26 @@ try {
             $problems.Add([pscustomobject]@{ Path=$relative; Line=$hit.LineNumber; Reason='Secret or personal local path pattern' })
         }
     }
-    [pscustomobject]@{ IndexedFiles=$files.Count; Problems=$problems.Count; Findings=@($problems.ToArray()); Scope='Tracked-file allowlist + bounded PNG/ICO branding validation + targeted secret/path scan; not exhaustive' }
+    # Runtime features are implemented in C# / Windows APIs. These checks cover
+    # product sources (including the pinned map generator), not development PS.
+    $productRoots = @('src/Core','src/Host','src/Desktop','src/RuntimeTools',
+        'external/MapStudio/src/Studio','external/MapStudio/src/Generator','external/MapStudio/src/NativeWorker')
+    $runtimeFiles = @($productRoots | ForEach-Object {
+        Get-ChildItem -LiteralPath (Join-Path $root $_) -Recurse -File |
+            Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' }
+    })
+    foreach($file in $runtimeFiles){
+        $relative = [IO.Path]::GetRelativePath($root,$file.FullName)
+        if($file.Extension -in '.bat','.cmd','.ps1','.psm1','.psd1','.vbs','.vbe','.wsf','.hta','.js','.cjs','.mjs','.sh','.py'){
+            $problems.Add([pscustomobject]@{Path=$relative;Reason='Runtime script is forbidden'})
+        }
+        if($file.Extension -eq '.cs'){
+            $shells = '(?i)["''](?:[^"''\r\n]*[\\/])?(?:cmd|powershell|pwsh|wscript|cscript|mshta|bash|sh)(?:\.exe)?["'']|["''][^"''\r\n]*\.(?:bat|cmd|ps1|vbs|wsf|hta|sh)["'']'
+            foreach($hit in Select-String -LiteralPath $file.FullName -Pattern $shells){
+                $problems.Add([pscustomobject]@{Path=$relative;Line=$hit.LineNumber;Reason='Runtime shell/script literal requires removal'})
+            }
+        }
+    }
+    [pscustomobject]@{ IndexedFiles=$files.Count; RuntimeFiles=$runtimeFiles.Count; Problems=$problems.Count; Findings=@($problems.ToArray()); Scope='Tracked-file allowlist, targeted secret scan, runtime script/shell guard; not exhaustive' }
     if ($problems.Count) { throw 'Publication boundary check failed.' }
 } finally { Pop-Location }

@@ -57,6 +57,7 @@ public sealed partial class MainWindow {
             } finally {startupQueue=savedStart;stopQueue=savedStop;busy=savedBusy;UpdateSelected();}
         }
         async Task Snap(string name){await Task.Delay(300);double scale=RenderScaling;using var bitmap=new RenderTargetBitmap(new PixelSize((int)(Bounds.Width*scale),(int)(Bounds.Height*scale)),new Vector(96*scale,96*scale));bitmap.Render(this);bitmap.Save(Path.Combine(output,name+".png"),PngBitmapEncoderOptions.Default);}
+        async Task SnapWindow(Window window,string name){await Task.Delay(300);double scale=window.RenderScaling;using var bitmap=new RenderTargetBitmap(new PixelSize((int)(window.Bounds.Width*scale),(int)(window.Bounds.Height*scale)),new Vector(96*scale,96*scale));bitmap.Render(window);bitmap.Save(Path.Combine(output,name+".png"),PngBitmapEncoderOptions.Default);}
         string? fixture=null;int fi=Array.IndexOf(Program.Args,"--probe-package");if(fi>=0&&Program.Args.Length>fi+1)fixture=Program.Args[fi+1];
         bool canFixture=states.Length==0&&fixture!=null&&File.Exists(Path.Combine(workspace.Root,".manager-ui-fixture"))&&File.Exists(Path.Combine(fixture,"Manager.ConsoleProbe.dll"))&&AssemblyName.GetAssemblyName(Path.Combine(fixture,"Manager.ConsoleProbe.dll")).Name=="Manager.ConsoleProbe";
         var fixtureIds=new HashSet<string>();
@@ -153,6 +154,21 @@ public sealed partial class MainWindow {
             var seedWindow=(Window)create.Invoke(controller,null)!;var dialog=seedWindow.ShowDialog(this);await Task.Delay(250);
             Check("embedded-seed-dialog-actual-owner",seedWindow.Owner==this&&seedWindow.GetVisualDescendants().OfType<CheckBox>().Count()==46);seedWindow.Close();await dialog;
             var mapWasBusy=studio.IsBusy;ServersNav.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check("switching-away-keeps-map-workspace",studio!=null&&studio.IsBusy==mapWasBusy&&ServersPage.IsVisible);
+            if(Program.Args.Contains("--about-smoke")){
+                AboutClick(null,new RoutedEventArgs());
+                Window? about=null;
+                bool aboutOpened=await WaitUntil(()=> (about=(Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Windows.FirstOrDefault(window=>window.Owner==this&&window.Title=="关于"))!=null,3000);
+                Check("about-dialog-opens",aboutOpened);
+                if(about!=null){
+                    var aboutText=about.GetVisualDescendants().OfType<TextBlock>().Select(text=>text.Text??"").ToArray();
+                    Check("about-version-display",aboutText.Contains("v0.2"));
+                    Check("about-author-label",aboutText.Contains("作者")&&aboutText.Contains("流光-Pigeon-X"));
+                    Check("about-team-label",aboutText.Contains("开发团队")&&aboutText.Contains("流光工作室"));
+                    Check("about-no-legacy-signature-label",!aboutText.Contains("署名"));
+                    await SnapWindow(about,"09-about");
+                    about.Close();
+                }
+            }
             Width=1220;Height=800;
             Check("minimum-window-size-applied",await WaitUntil(()=>Math.Abs(Bounds.Width-1220)<=2 && Math.Abs(Bounds.Height-800)<=2,3000));
             if(canFixture){var beforeMinimumBatch=appliedBatch;TripleToggle.IsChecked=true;await RefreshWorldConsoles();Check("minimum-three-console-frames",await WaitUntil(()=>FreshBatch(beforeMinimumBatch) && ThreeWorldFrames()));}

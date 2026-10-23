@@ -71,10 +71,15 @@ public sealed partial class SharedRuntime {
             throw new IOException("BLOCKED_MODULE_PATH_COLLISION");
         return result;
     }
-    string SupportStore => CreateDirectory(Safe(workspace.Library, ".support"));
+    string SupportStore => CreateDirectory(Safe(workspace.Data, "Library/Dependencies"));
     string SupportObject(SupportFile file) {
         ValidateHash(file.Sha256); ValidateRelative(file.Path);
-        return Safe(SupportStore, file.Sha256 + "/" + Path.GetFileName(file.Path));
+        var store = new ReadableLibrary(SupportStore);
+        string key = file.Sha256 + "/" + Path.GetFileName(file.Path).ToUpperInvariant();
+        string target = store.Find(key) ?? store.Reserve(key, Path.GetFileNameWithoutExtension(file.Path), Path.GetFileName(file.Path));
+        string old = Safe(workspace.Library, ".support/" + file.Sha256 + "/" + Path.GetFileName(file.Path));
+        if (!File.Exists(target) && File.Exists(old)) CopyVerified(old, target, file.Bytes, file.Sha256);
+        return target;
     }
     void StoreSupport(string source, SupportFile file) {
         string target = SupportObject(file); CreateDirectory(Path.GetDirectoryName(target)!);
@@ -88,7 +93,15 @@ public sealed partial class SharedRuntime {
     }
     string BindingPath(string sha) {
         ValidateHash(sha);
-        return Safe(CreateDirectory(Safe(workspace.Library, ".module-support")), sha + ".json");
+        var store = new ReadableLibrary(CreateDirectory(Safe(workspace.Data, "Library/Modules")));
+        string path = store.Find(sha) ?? store.Reserve(sha, "Module", "binding.json");
+        string old = Safe(workspace.Library, ".module-support/" + sha + ".json");
+        if (!File.Exists(path) && File.Exists(old)) {
+            var binding = Json.Decode<SupportBinding>(File.ReadAllText(old));
+            if (binding.OwnerSha256 != sha) throw new IOException("BLOCKED_LEGACY_SUPPORT_BINDING");
+            WriteNewJson(path, binding);
+        }
+        return path;
     }
     void ImportModuleSupport(string dll, PluginArtifact artifact) {
         var metadata = ReadModule(dll);

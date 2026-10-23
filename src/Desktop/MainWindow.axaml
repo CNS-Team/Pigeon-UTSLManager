@@ -125,7 +125,7 @@
     </Grid>
     <ContentControl x:Name="MapsPage" IsVisible="False"/>
    </Grid>
-   <Border Grid.Row="3" Background="#222329" BorderBrush="#36373F" BorderThickness="0,1,0,0"><Grid ColumnDefinitions="*,Auto" Margin="15,0"><TextBlock x:Name="StatusText" Text="本地工作区" Classes="muted" VerticalAlignment="Center" FontSize="10" TextTrimming="CharacterEllipsis"/><TextBlock Grid.Column="1" Text="流光工作室  ·  Pigeon-X  ·  0.1" Foreground="#8B90A2" FontSize="10" VerticalAlignment="Center"/></Grid></Border>
+   <Border Grid.Row="3" Background="#222329" BorderBrush="#36373F" BorderThickness="0,1,0,0"><Grid ColumnDefinitions="*,Auto" Margin="15,0"><TextBlock x:Name="StatusText" Text="本地工作区" Classes="muted" VerticalAlignment="Center" FontSize="10" TextTrimming="CharacterEllipsis"/><TextBlock x:Name="VersionText" Grid.Column="1" Text="流光工作室  ·  Pigeon-X" Foreground="#8B90A2" FontSize="10" VerticalAlignment="Center"/></Grid></Border>
   </Grid>
  </Border>
 </Window>

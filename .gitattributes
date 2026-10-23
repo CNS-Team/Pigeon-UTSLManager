@@ -5,3 +5,5 @@
 *.md text eol=lf
 *.json text eol=lf
 *.yml text eol=lf
+# Preserve byte-exact pinned third-party sources, including upstream EOL spaces.
+src/Terminal.VtNetCore/**/*.cs -text whitespace=-blank-at-eol

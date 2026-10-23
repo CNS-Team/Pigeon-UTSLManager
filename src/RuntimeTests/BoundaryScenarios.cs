@@ -1,4 +1,7 @@
-using System.Diagnostics;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
 using Pigeon.Manager;
 
 namespace RuntimeChecks;
@@ -72,9 +75,9 @@ static class BoundaryScenarios {
                     link = Path.Combine(f.Source(0), "config");
                     Directory.Move(link, Path.Combine(f.Source(0), "config-original"));
                 } else if (location == "source-code") link = Path.Combine(f.Source(0), "lib");
-                else if (location == "runtime-root") link = Path.Combine(f.Workspace.Root, "Runtime");
+                else if (location == "runtime-root") link = Path.Combine(f.Workspace.Root, "Core", "Runtime");
                 else if (location == "library-store") {
-                    link = Path.Combine(f.Workspace.Library, ".store");
+                    link = Path.Combine(f.Workspace.Data, "Library", "Plugins");
                     if (Directory.Exists(link)) Directory.Move(link, link + "-original");
                 } else {
                     link = Path.Combine(f.Workspace.Data, "runtime-selections");
@@ -102,13 +105,27 @@ static class BoundaryScenarios {
     }
     static void CreateJunction(string path, string target) {
         if (Directory.Exists(path) || File.Exists(path)) throw new IOException("Junction path must be new");
-        // These are fixture-created local paths; no delete/move crosses a shell boundary.
-        var start = new ProcessStartInfo("cmd.exe") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        start.ArgumentList.Add("/d"); start.ArgumentList.Add("/c"); start.ArgumentList.Add("mklink");
-        start.ArgumentList.Add("/J"); start.ArgumentList.Add(path); start.ArgumentList.Add(target);
-        using var process = Process.Start(start)!;
-        string output = process.StandardOutput.ReadToEnd(), error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        if (process.ExitCode != 0) throw new IOException("Fixture junction failed: " + output + error);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        // Exercise the reparse guard without introducing a shell in fixtures.
+        Directory.CreateDirectory(path);
+        byte[] substitute = Encoding.Unicode.GetBytes("\\??\\" + Path.GetFullPath(target));
+        byte[] display = Encoding.Unicode.GetBytes(Path.GetFullPath(target));
+        int pathBytes = checked(substitute.Length + display.Length + 4);
+        byte[] buffer = new byte[16 + pathBytes];
+        BitConverter.GetBytes(0xA0000003u).CopyTo(buffer, 0);
+        BitConverter.GetBytes(checked((ushort)(8 + pathBytes))).CopyTo(buffer, 4);
+        BitConverter.GetBytes(checked((ushort)substitute.Length)).CopyTo(buffer, 10);
+        BitConverter.GetBytes(checked((ushort)(substitute.Length + 2))).CopyTo(buffer, 12);
+        BitConverter.GetBytes(checked((ushort)display.Length)).CopyTo(buffer, 14);
+        substitute.CopyTo(buffer, 16); display.CopyTo(buffer, 18 + substitute.Length);
+        using var handle = CreateFileW(path, 0x40000000, 0, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+        if (handle.IsInvalid || !DeviceIoControl(handle, 0x000900A4, buffer, buffer.Length, null, 0, out _, IntPtr.Zero))
+            throw new IOException("Fixture junction failed", new Win32Exception(Marshal.GetLastWin32Error()));
+        string? actual = new DirectoryInfo(path).LinkTarget;
+        if (actual == null || !Helpers.SamePath(actual, target)) throw new IOException("Fixture junction verification failed");
     }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)] static extern bool DeviceIoControl(SafeFileHandle handle, uint code, byte[] input, int inputBytes, byte[]? output, int outputBytes, out int returned, IntPtr overlapped);
 }
