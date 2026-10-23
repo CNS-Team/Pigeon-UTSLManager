@@ -8,7 +8,7 @@ var workspace = new Workspace(Path.Combine(output, "隔离管理器"));
 var results = new List<object>(); int passed = 0, failed = 0;
 void Check(string name, bool ok) { results.Add(new { name, pass = ok }); if (ok) passed++; else failed++; Console.WriteLine((ok ? "PASS " : "FAIL ") + name); }
 bool Reject(Action action) { try { action(); return false; } catch { return true; } }
-Check("root-layout", new[] { "插件库", "服务器", "地图", "备份", "数据" }.All(x => Directory.Exists(Path.Combine(workspace.Root, x))));
+Check("root-layout", new[] { "plugins", "servers", "maps", "backups", "data" }.All(x => Directory.Exists(Path.Combine(workspace.Root, x))));
 Check("path-traversal-rejected", Reject(() => Workspace.Under(workspace.Servers, "../escape")));
 Check("absolute-path-rejected", Reject(() => Workspace.Under(workspace.Servers, output)));
 Check("new-roster-empty-no-example-production", workspace.Load().Count == 0);
@@ -47,6 +47,17 @@ var state1 = (await Call("list")).Servers!.Single(s => s.Profile.Id == p1.Id);
 var state2 = (await Call("list")).Servers!.Single(s => s.Profile.Id == p2.Id);
 Check("two-different-pids-owned", state1.Identity != null && state2.Identity != null && state1.Identity.Pid != state2.Identity.Pid);
 Check("exact-process-path-and-creation-verified", state1.Identity!.IsCurrent());
+var referenced = new Workspace(Path.Combine(output, "existing-reference-manager"));
+var refProfile = referenced.RegisterExisting(workspace.ServerDirectory(p1));
+Check("existing-registration-no-copy", referenced.ServerDirectory(refProfile) == workspace.ServerDirectory(p1) && !File.Exists(Path.Combine(referenced.Servers, refProfile.Folder, "UnifierTSL.exe")));
+Check("existing-registration-duplicate-rejected", Reject(() => referenced.RegisterExisting(workspace.ServerDirectory(p1) + Path.DirectorySeparatorChar)));
+Check("existing-registration-root-rejected", Reject(() => referenced.RegisterExisting(workspace.Root)));
+var refClient = new HostClient(referenced, Path.GetFullPath(args[1])); await refClient.EnsureStarted();
+var external = (await refClient.Send(new("list"))).Servers!.Single();
+Check("existing-running-server-is-external", external.State == "EXTERNAL" && external.Identity == state1.Identity);
+Check("external-duplicate-start-refused", !(await refClient.Send(new("start", refProfile.Id))).Ok);
+Check("external-stop-refused", !(await refClient.Send(new("stop", refProfile.Id))).Ok);
+Check("external-force-stop-refused", !(await refClient.Send(new("force-stop", refProfile.Id, Identity: state1.Identity))).Ok && state1.Identity.IsCurrent());
 Check("stale-pid-identity-rejected", !new ProcessIdentity(state1.Identity.Pid, state1.Identity.StartedUtcTicks - 1, state1.Identity.Executable).IsCurrent());
 Check("path-identity-mismatch-rejected", !new ProcessIdentity(state1.Identity.Pid, state1.Identity.StartedUtcTicks, state2.Identity!.Executable).IsCurrent());
 workspace.AddPlugins([typeof(Workspace).Assembly.Location]); Check("plugin-metadata-without-load", workspace.Plugins().Length == 1);
@@ -80,7 +91,20 @@ Check("copied-plugin-exact-sha", Hashes.FileSha(Path.Combine(workspace.ServerDir
 Check("backup-manifest-recorded", Directory.GetFiles(workspace.Backups, "manifest.json", SearchOption.AllDirectories).Length == 1);
 Check("cannot-stop-host-with-live-server", !(await Call("shutdown-host")).Ok);
 Check("second-server-graceful-stop", (await Call("stop", p2.Id)).Ok);
+Check("reference-host-shutdown-after-external-stopped", (await refClient.Send(new("shutdown-host"))).Ok);
+Check("explicit-autostart-profile-save", (await client.Send(new("save-profile", p1.Id, Profile: p1 with { AutoStart = true }))).Ok);
 Check("all-original-files-still-unchanged", before.All(p => Hashes.FileSha(p.Key) == p.Value));
 Check("host-shutdown-only-when-no-running-servers", (await Call("shutdown-host")).Ok);
+await Task.Delay(800); await client.EnsureStarted();
+var autoStates = (await Call("list")).Servers!;
+var auto = autoStates.Single(s => s.Profile.Id == p1.Id);
+Check("explicit-autostart-only-selected-profile", auto.State == "RUNNING" && auto.Identity?.IsCurrent() == true && autoStates.Single(s => s.Profile.Id == p2.Id).Identity == null);
+Check("autostart-console-usable", (await WaitText(p1.Id, "CONPTY_READY")).Contains("CONPTY_READY"));
+using (var duplicate = Process.Start(new ProcessStartInfo(Path.GetFullPath(args[1])) { UseShellExecute = false, CreateNoWindow = true, Arguments = "--root \"" + workspace.Root + "\"" })!) {
+    using var deadline = new CancellationTokenSource(10000); await duplicate.WaitForExitAsync(deadline.Token);
+    Check("duplicate-host-refused-by-root-lock", duplicate.ExitCode == 0 && (await Call("list")).Servers!.Single(s => s.Profile.Id == p1.Id).Identity == auto.Identity);
+}
+Check("autostart-server-stopped", (await Call("stop", p1.Id)).Ok);
+Check("autostart-host-clean-shutdown", (await Call("shutdown-host")).Ok);
 Json.Save(Path.Combine(output, "result.json"), new { passed, failed, results, scope = "real local ConPTY processes + file boundaries; not real UTSL gameplay", productionTouched = false });
 Console.WriteLine($"RESULT {passed}P/{failed}F"); return failed == 0 ? 0 : 1;

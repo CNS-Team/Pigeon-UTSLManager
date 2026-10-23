@@ -10,11 +10,11 @@ internal static class Program {
     [STAThread] public static int Main(string[] args) {
         Args = args;
         int index = Array.IndexOf(args, "--root");
-        string defaultRoot = string.Equals(Path.GetFileName(Environment.ProcessPath), "UTSL服务器管理器.exe", StringComparison.OrdinalIgnoreCase)
+        string defaultRoot = string.Equals(Path.GetFileName(Environment.ProcessPath), "UTSl-Manager.exe", StringComparison.OrdinalIgnoreCase)
             ? Path.GetDirectoryName(Environment.ProcessPath!)! : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", ".."));
         Root = index >= 0 && args.Length > index + 1 ? Path.GetFullPath(args[index + 1]) : defaultRoot;
         try { return AppBuilder.Configure<ManagerApp>().UsePlatformDetect().LogToTrace().StartWithClassicDesktopLifetime(args); }
-        catch (Exception e) { Directory.CreateDirectory(Path.Combine(Root, "数据")); File.AppendAllText(Path.Combine(Root, "数据", "ui-error.log"), e + Environment.NewLine); return 1; }
+        catch (Exception e) { Directory.CreateDirectory(Path.Combine(Root, "data")); File.AppendAllText(Path.Combine(Root, "data", "ui-error.log"), e + Environment.NewLine); return 1; }
     }
 }
 public sealed partial class ManagerApp : Application {

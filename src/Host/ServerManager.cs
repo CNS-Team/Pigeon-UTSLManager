@@ -37,6 +37,7 @@ sealed class ServerManager(Workspace workspace) {
         if (request.Action == "list") return new(true, Servers: Snapshot());
         if (request.Action == "plugins") return new(true, Plugins: workspace.Plugins());
         if (request.Action == "import") { lock (filesGate) { var p = workspace.Import(request.Value ?? ""); return new(true, "服务端包已复制，原目录未修改", Servers: Snapshot(), Path: workspace.ServerDirectory(p)); } }
+        if (request.Action == "register-existing") { lock(filesGate){var p=workspace.RegisterExisting(request.Value??"");return new(true,"已登记原目录；未复制、未启动、未接管当前进程",Servers:Snapshot(),Path:workspace.ServerDirectory(p));} }
         if (request.Action == "library-add") { lock (filesGate) workspace.AddPlugins(request.Files ?? []); return new(true, "已导入插件库", Plugins: workspace.Plugins()); }
         if (request.Action == "shutdown-host") {
             if (Snapshot().Any(s => s.Identity != null)) return new(false, "仍有服务端在运行，不能关闭后台");
@@ -102,7 +103,7 @@ sealed class ServerManager(Workspace workspace) {
                 case "save-profile":
                     RequireStopped(profile, session);
                     var updated = request.Profile ?? throw new IOException("缺少设置");
-                    if (updated.Id != profile.Id || updated.Folder != profile.Folder || updated.Executable != profile.Executable) throw new IOException("禁止变更目录或程序身份");
+                    if (updated.Id != profile.Id || updated.Folder != profile.Folder || updated.Executable != profile.Executable || updated.ExistingDirectory != profile.ExistingDirectory) throw new IOException("禁止变更目录或程序身份");
                     if (updated.Ports.Any(p => p < 1 || p > 65535) || updated.Arguments.Any(a => a.Contains('\0'))) throw new IOException("设置无效");
                     lock (filesGate) { var profiles = workspace.Load(); profiles[profiles.FindIndex(p => p.Id == profile.Id)] = updated; workspace.Save(profiles); }
                     workspace.Audit("profile-update", profile.Id, updated); return new(true, "启动配置已保存；未改服务端原配置", Servers: Snapshot());

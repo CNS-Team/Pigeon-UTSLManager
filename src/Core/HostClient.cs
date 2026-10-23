@@ -19,6 +19,6 @@ public sealed class HostClient(Workspace workspace, string hostExecutable) {
         psi.ArgumentList.Add("--root"); psi.ArgumentList.Add(workspace.Root);
         Process.Start(psi)?.Dispose();
         for (int i = 0; i < 40; i++) { await Task.Delay(150); try { await Send(new("ping"), 400); return; } catch (Exception e) when (e is TimeoutException or OperationCanceledException or IOException) { } }
-        throw new IOException("后台未能就绪，请检查数据/host-error.log");
+        throw new IOException("后台未能就绪，请检查 data/host-error.log");
     }
 }

@@ -18,10 +18,12 @@ public sealed record ServerProfile {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "UTSL服务器";
     public string Folder { get; init; } = "";
+    public string? ExistingDirectory { get; init; }
     public string Executable { get; init; } = "UnifierTSL.exe";
     public string[] Arguments { get; set; } = [];
     public int[] Ports { get; set; } = [];
     public bool HeadlessWorlds { get; set; } = true;
+    public bool AutoStart { get; set; }
 }
 public sealed record ProcessIdentity(int Pid, long StartedUtcTicks, string Executable) {
     public bool IsCurrent() {

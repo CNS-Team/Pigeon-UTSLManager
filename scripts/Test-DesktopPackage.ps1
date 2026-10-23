@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $package = [IO.Path]::GetFullPath($PackageRoot)
 $probeOutput = [IO.Path]::GetFullPath($ProbeOutput)
 $evidence = [IO.Path]::GetFullPath($EvidenceDirectory)
-if (!(Test-Path -LiteralPath (Join-Path $package 'UTSL服务器管理器.exe'))) { throw 'Packaged root EXE missing.' }
+if (!(Test-Path -LiteralPath (Join-Path $package 'UTSl-Manager.exe'))) { throw 'Packaged root EXE missing.' }
 if (!(Test-Path -LiteralPath (Join-Path $probeOutput 'Manager.ConsoleProbe.exe'))) { throw 'Console fixture probe missing.' }
 if (Test-Path -LiteralPath $evidence) { throw 'Evidence directory exists; refusing to overwrite.' }
 New-Item -ItemType Directory -Path $evidence | Out-Null
@@ -25,7 +25,7 @@ try {
     $uiEvidence = Join-Path $evidence 'ui'
     $args = @('--ui-smoke', $uiEvidence, '--probe-package', $fixture, '--root', $package)
     if ($Panorama) { $args += @('--panorama', [IO.Path]::GetFullPath($Panorama)) }
-    $launch = [Diagnostics.ProcessStartInfo]::new((Join-Path $package 'UTSL服务器管理器.exe'))
+    $launch = [Diagnostics.ProcessStartInfo]::new((Join-Path $package 'UTSl-Manager.exe'))
     $launch.UseShellExecute = $false
     foreach ($argument in $args) { $launch.ArgumentList.Add($argument) }
     $process = [Diagnostics.Process]::Start($launch)
@@ -38,6 +38,6 @@ try {
 } finally {
     if (Test-Path -LiteralPath $fixtureMarker) { Remove-Item -LiteralPath $fixtureMarker -Force }
 }
-$leftovers = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like (Join-Path $package '程序/host/*') })
+$leftovers = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like (Join-Path $package 'app/host/*') })
 if ($leftovers.Count -ne 0) { throw 'Fixture host process remains.' }
-[pscustomobject]@{ Passed=$result.passed; Failed=$result.failed; ExitCode=$process.ExitCode; Evidence=$evidence; ProductHash=(Get-FileHash -LiteralPath (Join-Path $package 'UTSL服务器管理器.exe')).Hash; FixtureProcessesStopped=$true; Scope='packaged local GUI and probe servers only; no production servers or game clients' } | ConvertTo-Json -Depth 5
+[pscustomobject]@{ Passed=$result.passed; Failed=$result.failed; ExitCode=$process.ExitCode; Evidence=$evidence; ProductHash=(Get-FileHash -LiteralPath (Join-Path $package 'UTSl-Manager.exe')).Hash; FixtureProcessesStopped=$true; Scope='packaged local GUI and probe servers only; no production servers or game clients' } | ConvertTo-Json -Depth 5

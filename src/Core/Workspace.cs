@@ -4,11 +4,12 @@ namespace Pigeon.Manager;
 
 public sealed class Workspace {
     public string Root { get; }
-    public string Servers => Path.Combine(Root, "服务器");
-    public string Library => Path.Combine(Root, "插件库");
-    public string Data => Path.Combine(Root, "数据");
-    public string Backups => Path.Combine(Root, "备份");
-    public string Maps => Path.Combine(Root, "地图");
+    public string Servers => Path.Combine(Root, "servers");
+    public string Library => Path.Combine(Root, "plugins");
+    public string Data => Path.Combine(Root, "data");
+    public string Backups => Path.Combine(Root, "backups");
+    public string Maps => Path.Combine(Root, "maps");
+    public string App => Path.Combine(Root, "app");
     public string Pipe => "PigeonUTSL_" + Hashes.RootId(Root);
     public Workspace(string root) {
         Root = Path.GetFullPath(root);
@@ -28,8 +29,22 @@ public sealed class Workspace {
     }
     public List<ServerProfile> Load() => File.Exists(Path.Combine(Data, "servers.json")) ? Json.Decode<List<ServerProfile>>(File.ReadAllText(Path.Combine(Data, "servers.json"))) : [];
     public void Save(List<ServerProfile> profiles) => Json.Save(Path.Combine(Data, "servers.json"), profiles);
-    public string ServerDirectory(ServerProfile profile) => Under(Servers, profile.Folder);
+    public string ServerDirectory(ServerProfile profile) {
+        if(profile.ExistingDirectory is not {} existing)return Under(Servers,profile.Folder);
+        string full=Path.GetFullPath(existing);EnsureNoLinks(full);return full;
+    }
     public string ServerExecutable(ServerProfile profile) => Under(ServerDirectory(profile), profile.Executable);
+    public ServerProfile RegisterExisting(string source) {
+        source=Path.TrimEndingDirectorySeparator(Path.GetFullPath(source));EnsureNoLinks(source);
+        if(!File.Exists(Path.Combine(source,"UnifierTSL.exe")))throw new IOException("目录根部缺少 UnifierTSL.exe");
+        if(Load().Any(p=>ServerDirectory(p).Equals(source,StringComparison.OrdinalIgnoreCase)))throw new IOException("该服务器目录已登记");
+        if(source.Equals(Root,StringComparison.OrdinalIgnoreCase) || Root.StartsWith(source.TrimEnd('\\')+"\\",StringComparison.OrdinalIgnoreCase))throw new IOException("不能将管理器根目录或其父目录登记为服务器");
+        string id=Guid.NewGuid().ToString("N");
+        var profile=new ServerProfile{Id=id,Name=Path.GetFileName(source.TrimEnd('\\')),Folder="existing-"+id[..8],ExistingDirectory=source};
+        string reference=Under(Servers,profile.Folder);Directory.CreateDirectory(reference);
+        Json.Save(Path.Combine(reference,"server-reference.json"),new{source,mode="EXPLICIT_EXISTING_DIRECTORY_NO_COPY_NO_START"});
+        var list=Load();list.Add(profile);Save(list);Audit("register-existing-no-copy-no-start",id,new{source,reference});return profile;
+    }
     public ServerProfile Import(string source) {
         source = Path.GetFullPath(source); EnsureNoLinks(source);
         if (!File.Exists(Path.Combine(source, "UnifierTSL.exe"))) throw new IOException("目录根部缺少 UnifierTSL.exe，请选择完整 UTSL 服务端包");

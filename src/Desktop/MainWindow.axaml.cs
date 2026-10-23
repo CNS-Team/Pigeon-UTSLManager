@@ -24,7 +24,7 @@ public sealed partial class MainWindow : Window {
     WindowState stateBeforeFullscreen = WindowState.Normal;
     public MainWindow() {
         InitializeComponent(); workspace = new(Program.Root);
-        client = new(workspace, Path.Combine(workspace.Root, "程序", "host", "Pigeon.UTSLManager.Host.exe"));
+        client = new(workspace, Path.Combine(workspace.App, "host", "Pigeon.UTSLManager.Host.exe"));
         StatusText.Text = workspace.Root;
         StartButton.IsEnabled = StopButton.IsEnabled = RestartButton.IsEnabled = ProfileButton.IsEnabled = ServerFolderButton.IsEnabled = SendButton.IsEnabled = false;
         PrimaryTerminal.ResizeTerminal = (c,r) => Resize(selectedId,c,r);
@@ -111,7 +111,7 @@ public sealed partial class MainWindow : Window {
         if (id == null || !states.Any(s=>s.Profile.Id==id)) { view.Session=null;view.Refresh();return; }
         var model = Model(id); var r = await client.Send(new("read",id,Cursor:model.Cursor));
         if (!r.Ok || r.Log == null) return;
-        if (r.Log.Truncated) { terminals.Remove(id); model=Model(id); model.Feed("[manager] 已超出内存回放范围；完整日志见数据/logs\r\n"); }
+        if (r.Log.Truncated) { terminals.Remove(id); model=Model(id); model.Feed("[manager] 已超出内存回放范围；完整日志见 data/logs\r\n"); }
         foreach (var chunk in r.Log.Chunks) model.Feed(chunk.Text);
         model.Cursor=r.Log.Cursor; view.Session=model; view.Refresh();
     }
@@ -132,6 +132,12 @@ public sealed partial class MainWindow : Window {
         string? source=folders.FirstOrDefault()?.TryGetLocalPath();if(source==null)return;
         await Act(new("import",Value:source),"复制独立服务端包中…");
     }
+    async void RegisterExistingClick(object? sender,RoutedEventArgs e) {
+        if(busy)return;
+        var folders=await StorageProvider.OpenFolderPickerAsync(new(){Title="选择现有 UTSL 服务端目录（原地登记）",AllowMultiple=false});
+        string? source=folders.FirstOrDefault()?.TryGetLocalPath();if(source==null)return;
+        await Act(new("register-existing",Value:source),"登记原目录…");
+    }
     async Task SendCommand(string? id,TextBox box){if(id==null||string.IsNullOrWhiteSpace(box.Text))return;string value=box.Text;var r=await client.Send(new("send",id,value+"\r"));if(r.Ok)box.Text="";else StatusText.Text=r.Message;}
     async void SendClick(object? s,RoutedEventArgs e){try{await SendCommand(selectedId,CommandInput);}catch(Exception ex){StatusText.Text=ex.Message;}}
     async void CommandKeyDown(object? s,KeyEventArgs e){if(e.Key==Key.Enter){e.Handled=true;try{await SendCommand(selectedId,CommandInput);}catch(Exception ex){StatusText.Text=ex.Message;}}}
@@ -145,7 +151,7 @@ public sealed partial class MainWindow : Window {
     void ServersClick(object? s,RoutedEventArgs e)=>Page(0);
     async void PluginsClick(object? s,RoutedEventArgs e){Page(1);await LoadPlugins();}
     void MapsClick(object? s,RoutedEventArgs e){
-        try{if(studio==null){studio=new StudioWorkspace(this,Path.Combine(workspace.Root,"程序","mapstudio"),workspace.Maps);MapsPage.Content=studio.View;}Page(2);}
+        try{if(studio==null){studio=new StudioWorkspace(this,Path.Combine(workspace.App,"mapstudio"),workspace.Maps);MapsPage.Content=studio.View;}Page(2);}
         catch(Exception ex){StatusText.Text=ex.Message;}
     }
     async Task LoadPlugins(){try{var r=await client.Send(new("plugins"));if(!r.Ok)throw new IOException(r.Message);PluginCount.Text=$"{r.Plugins!.Length} 个插件";PluginList.ItemsSource=r.Plugins.Select(p=>{
@@ -180,10 +186,11 @@ public sealed partial class MainWindow : Window {
         var panel=new StackPanel{Margin=new(24),Spacing=10};TextBox Field(string label,string value,bool multi=false){panel.Children.Add(new TextBlock{Text=label,Foreground=Brush.Parse("#A4A7B7"),FontSize=11});var box=new TextBox{Text=value,IsReadOnly=!editable,AcceptsReturn=multi,Height=multi?105:double.NaN};panel.Children.Add(box);return box;}
         var name=Field("服务器名称",p.Name);var ports=Field("预检端口（不修改服务端配置）",string.Join(',',p.Ports));var arguments=Field("启动参数（每行一个参数）",string.Join('\n',p.Arguments),true);
         var headless=new CheckBox{Content="世界控制台不另弹窗口",IsChecked=p.HeadlessWorlds,IsEnabled=editable};panel.Children.Add(headless);
+        var autoStart=new CheckBox{Content="管理后台启动时自动启动此服",IsChecked=p.AutoStart,IsEnabled=editable};panel.Children.Add(autoStart);
         var directory=new TextBlock{Text=workspace.ServerDirectory(p),TextWrapping=TextWrapping.Wrap,FontSize=10,Foreground=Brush.Parse("#9A9EAE")};panel.Children.Add(directory);
         var status=new TextBlock{Text=editable?"已停止":"运行中 · 只读",Foreground=Brush.Parse("#D7B27C")};panel.Children.Add(status);
         var actions=new StackPanel{Orientation=Avalonia.Layout.Orientation.Horizontal,Spacing=8};var native=new Button{Content="原生配置…"};var cancel=new Button{Content="关闭"};var save=new Button{Content="保存启动配置",IsEnabled=editable};actions.Children.Add(native);actions.Children.Add(cancel);actions.Children.Add(save);panel.Children.Add(actions);var window=Dialog("启动设置",panel,650);
-        native.Click+=async(_,_)=>await EditNativeConfig(p);cancel.Click+=(_,_)=>window.Close();save.Click+=async(_,_)=>{try{int[] parsed=(ports.Text??"").Split([',','，',' '],StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToArray();var updated=p with{Name=name.Text?.Trim()??p.Name,Ports=parsed,Arguments=(arguments.Text??"").Split('\n',StringSplitOptions.RemoveEmptyEntries).Select(a=>a.TrimEnd('\r')).ToArray(),HeadlessWorlds=headless.IsChecked==true};var r=await client.Send(new("save-profile",p.Id,Profile:updated));status.Text=r.Message;if(r.Ok){window.Close();await RefreshState();}}catch(Exception ex){status.Text=ex.Message;}};await window.ShowDialog(this);
+        native.Click+=async(_,_)=>await EditNativeConfig(p);cancel.Click+=(_,_)=>window.Close();save.Click+=async(_,_)=>{try{int[] parsed=(ports.Text??"").Split([',','，',' '],StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToArray();var updated=p with{Name=name.Text?.Trim()??p.Name,Ports=parsed,Arguments=(arguments.Text??"").Split('\n',StringSplitOptions.RemoveEmptyEntries).Select(a=>a.TrimEnd('\r')).ToArray(),HeadlessWorlds=headless.IsChecked==true,AutoStart=autoStart.IsChecked==true};var r=await client.Send(new("save-profile",p.Id,Profile:updated));status.Text=r.Message;if(r.Ok){window.Close();await RefreshState();}}catch(Exception ex){status.Text=ex.Message;}};await window.ShowDialog(this);
     }
     async Task EditNativeConfig(ServerProfile p){var r=await client.Send(new("read-config",p.Id));if(!r.Ok){await Notice("原生配置",r.Message);return;}var panel=new Grid{RowDefinitions=new("Auto,*,Auto"),Margin=new(20),RowSpacing=12};panel.Children.Add(new TextBlock{Text="config/config.json",Foreground=Brush.Parse("#A8B0C8")});var text=new TextBox{Text=r.Message,AcceptsReturn=true,TextWrapping=TextWrapping.NoWrap,FontFamily=FontFamily.Parse("Cascadia Mono,Consolas"),IsReadOnly=states.First(x=>x.Profile.Id==p.Id).Identity!=null};Grid.SetRow(text,1);panel.Children.Add(text);var save=new Button{Content="备份并保存",IsEnabled=!text.IsReadOnly,HorizontalAlignment=Avalonia.Layout.HorizontalAlignment.Right};Grid.SetRow(save,2);panel.Children.Add(save);var w=new Window{Title="原生配置",Width=860,Height=650,Content=panel,WindowStartupLocation=WindowStartupLocation.CenterOwner,Icon=Icon};save.Click+=async(_,_)=>{var response=await client.Send(new("save-config",p.Id,text.Text));if(response.Ok)w.Close();else await Notice("未保存",response.Message);};await w.ShowDialog(this);}
 }

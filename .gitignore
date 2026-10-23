@@ -10,6 +10,12 @@
 /地图/
 /备份/
 /数据/
+/plugins/
+/servers/
+/maps/
+/backups/
+/data/
+/app/
 *.user
 *.log
 *.wld*
