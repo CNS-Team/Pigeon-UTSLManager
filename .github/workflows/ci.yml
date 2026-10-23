@@ -1,0 +1,20 @@
+name: Source boundary and build
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Check public source boundary
+        shell: pwsh
+        run: ./scripts/Test-SourceSafety.ps1
+      - name: Build manager and local test tools
+        shell: pwsh
+        run: ./scripts/Build.ps1

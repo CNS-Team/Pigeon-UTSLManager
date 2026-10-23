@@ -1,0 +1,18 @@
+<Application xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="Pigeon.Manager.Desktop.ManagerApp" RequestedThemeVariant="Dark">
+ <Application.Styles>
+  <FluentTheme/>
+  <Style Selector="Window"><Setter Property="FontFamily" Value="Microsoft YaHei UI"/><Setter Property="FontSize" Value="12"/><Setter Property="Foreground" Value="#E8E9EF"/><Setter Property="Background" Value="#18191D"/></Style>
+  <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#8C8F9C"/></Style>
+  <Style Selector="TextBlock.caption"><Setter Property="Foreground" Value="#989BAD"/><Setter Property="FontSize" Value="11"/><Setter Property="Margin" Value="0,0,0,6"/></Style>
+  <Style Selector="Button"><Setter Property="CornerRadius" Value="6"/><Setter Property="Padding" Value="12,8"/><Setter Property="MinHeight" Value="34"/><Setter Property="Background" Value="#2B2C34"/><Setter Property="BorderBrush" Value="#3B3C47"/><Setter Property="Foreground" Value="#DDDFE9"/></Style>
+  <Style Selector="Button.primary"><Setter Property="Background" Value="#6E91F1"/><Setter Property="Foreground" Value="#10141F"/><Setter Property="BorderThickness" Value="0"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+  <Style Selector="Button.nav"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="18,9"/></Style>
+  <Style Selector="Button.nav.active"><Setter Property="Background" Value="#343142"/><Setter Property="Foreground" Value="#CEC0FF"/></Style>
+  <Style Selector="Button.traffic"><Setter Property="Width" Value="13"/><Setter Property="Height" Value="13"/><Setter Property="MinWidth" Value="0"/><Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="0"/><Setter Property="CornerRadius" Value="7"/><Setter Property="BorderThickness" Value="0"/></Style>
+  <Style Selector="Button.icon"><Setter Property="Width" Value="34"/><Setter Property="Padding" Value="7"/></Style>
+  <Style Selector="TextBox"><Setter Property="Background" Value="#17181C"/><Setter Property="BorderBrush" Value="#3A3B45"/><Setter Property="CornerRadius" Value="5"/><Setter Property="MinHeight" Value="35"/></Style>
+  <Style Selector="ComboBox"><Setter Property="Background" Value="#24252C"/><Setter Property="BorderBrush" Value="#3A3B45"/><Setter Property="CornerRadius" Value="5"/><Setter Property="MinHeight" Value="34"/><Setter Property="HorizontalAlignment" Value="Stretch"/></Style>
+  <Style Selector="ListBoxItem"><Setter Property="CornerRadius" Value="5"/><Setter Property="Padding" Value="10,9"/><Setter Property="Margin" Value="4,2"/></Style>
+ </Application.Styles>
+ <Application.Resources><Color x:Key="SystemAccentColor">#8F91F4</Color><Color x:Key="SystemAccentColorLight1">#ADB0FF</Color><Color x:Key="SystemAccentColorDark1">#6A74B9</Color></Application.Resources>
+</Application>

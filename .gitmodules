@@ -1,0 +1,3 @@
+[submodule "external/MapStudio"]
+	path = external/MapStudio
+	url = https://github.com/CNS-Team/UTSL-MapStudio.git
