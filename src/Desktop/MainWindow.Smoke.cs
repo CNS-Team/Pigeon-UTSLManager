@@ -22,6 +22,17 @@ public sealed partial class MainWindow {
             Check("actual-avalonia-dark-window",IsVisible&&ActualThemeVariant==ThemeVariant.Dark);
             Check("no-default-production-roster",states.Length==0);
             Check("no-start-when-empty",!StartButton.IsEnabled);
+            Check("traffic-and-right-window-controls",TrafficControls.Children.Count==3 && WindowControls.Children.OfType<Button>().Count()==4);
+            MaximizeWindowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(250);
+            Check("right-maximize-button",WindowState==WindowState.Maximized);
+            MaximizeWindowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(150);
+            Check("right-restore-button",WindowState==WindowState.Normal);
+            FullscreenButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(250);
+            Check("right-fullscreen-button",WindowState==WindowState.FullScreen);
+            FullscreenButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(150);
+            Check("fullscreen-restores-previous-state",WindowState==WindowState.Normal);
+            MinimizeWindowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(250);
+            Check("right-minimize-button",WindowState==WindowState.Minimized);WindowState=WindowState.Normal;await Task.Delay(200);
             await Snap("01-empty-server-workspace");
             if(canFixture){
                 for(int i=1;i<=2;i++){var imported=await client.Send(new("import",Value:fixture),60_000);Check("fixture-package-import-"+i,imported.Ok);await RefreshState();var p=states.Last().Profile;var r=await client.Send(new("save-profile",p.Id,Profile:p with{Name=i==1?"本地验证 · 西中东":"本地验证 · 流光城"}));Check("per-instance-name-"+i,r.Ok);}

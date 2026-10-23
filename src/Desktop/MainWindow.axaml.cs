@@ -21,6 +21,7 @@ public sealed partial class MainWindow : Window {
     string signature = "", idsSignature = "";
     bool refreshing, rebuilding, busy;
     StudioWorkspace? studio;
+    WindowState stateBeforeFullscreen = WindowState.Normal;
     public MainWindow() {
         InitializeComponent(); workspace = new(Program.Root);
         client = new(workspace, Path.Combine(workspace.Root, "程序", "host", "Pigeon.UTSLManager.Host.exe"));
@@ -35,6 +36,7 @@ public sealed partial class MainWindow : Window {
         };
         Closing += (_, e) => { if (studio?.IsBusy == true) { e.Cancel = true; studio.Cancel(); StatusText.Text = "地图生成取消中，所属进程退出后可关闭"; } };
         Closed += (_, _) => { polling.Stop(); studio?.Dispose(); };
+        KeyDown += (_, e) => { if(e.Key==Key.Escape && WindowState==WindowState.FullScreen){WindowState=stateBeforeFullscreen;e.Handled=true;} };
     }
     async Task RefreshState() {
         if (refreshing) return; refreshing = true;
@@ -160,7 +162,14 @@ public sealed partial class MainWindow : Window {
     void CloseClick(object? s,RoutedEventArgs e)=>Close();
     void MinClick(object? s,RoutedEventArgs e)=>WindowState=WindowState.Minimized;
     void MaxClick(object? s,RoutedEventArgs e)=>WindowState=WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;
-    void DragWindow(object? s,PointerPressedEventArgs e){if(e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)BeginMoveDrag(e);}
+    void FullscreenClick(object? s,RoutedEventArgs e){
+        if(WindowState==WindowState.FullScreen)WindowState=stateBeforeFullscreen;
+        else{stateBeforeFullscreen=WindowState;WindowState=WindowState.FullScreen;}
+    }
+    void DragWindow(object? s,PointerPressedEventArgs e){
+        for(var current=e.Source as StyledElement;current!=null;current=current.Parent)if(current is Button)return;
+        if(e.GetCurrentPoint(this).Properties.IsLeftButtonPressed){if(e.ClickCount==2)MaxClick(s,e);else BeginMoveDrag(e);}
+    }
     async void AboutClick(object? s,RoutedEventArgs e)=>await Notice("关于","UTSL服务器管理器 0.1\n开发团队：流光工作室\n署名：流光-Pigeon-X\n地图工坊：CNS-Team/UTSL-MapStudio\n参考：CNS-Team/PGame-TSManager\nGPL-3.0；第三方组件保留原有许可。");
     Window Dialog(string title,Control content,double width=500)=>new(){Title=title,Content=content,Width=width,SizeToContent=SizeToContent.Height,CanResize=false,WindowStartupLocation=WindowStartupLocation.CenterOwner,Icon=Icon,Background=Brush.Parse("#222329")};
     async Task<bool> Confirm(string title,string message){bool result=false;var panel=new StackPanel{Margin=new(25),Spacing=18};panel.Children.Add(new TextBlock{Text=message,TextWrapping=TextWrapping.Wrap});var buttons=new StackPanel{Orientation=Avalonia.Layout.Orientation.Horizontal,Spacing=9,HorizontalAlignment=Avalonia.Layout.HorizontalAlignment.Right};var no=new Button{Content="取消"};var yes=new Button{Content="确认"};yes.Classes.Add("primary");buttons.Children.Add(no);buttons.Children.Add(yes);panel.Children.Add(buttons);var w=Dialog(title,panel,590);no.Click+=(_,_)=>w.Close();yes.Click+=(_,_)=>{result=true;w.Close();};await w.ShowDialog(this);return result;}
