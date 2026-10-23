@@ -3,6 +3,7 @@ using System.Text.Json;
 namespace Pigeon.Manager;
 
 public sealed class Workspace {
+    readonly object auditGate = new();
     public string Root { get; }
     public string Servers => Path.Combine(Root, "Servers");
     public string Library => Path.Combine(Root, "Plugins");
@@ -27,7 +28,10 @@ public sealed class Workspace {
         if (!full.StartsWith(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new IOException("路径越界");
         EnsureNoLinks(full); return full;
     }
-    public List<ServerProfile> Load() => File.Exists(Path.Combine(Data, "servers.json")) ? Json.Decode<List<ServerProfile>>(File.ReadAllText(Path.Combine(Data, "servers.json"))) : [];
+    public List<ServerProfile> Load() => File.Exists(Path.Combine(Data, "servers.json"))
+        ? Json.Decode<List<ServerProfile>>(File.ReadAllText(Path.Combine(Data, "servers.json")))
+            .OrderBy(p => int.TryParse(p.Folder.Split('.')[0], out int n) && n >= 0 ? n : int.MaxValue)
+            .ThenBy(p => p.Folder, StringComparer.OrdinalIgnoreCase).ToList() : [];
     public void Save(List<ServerProfile> profiles) => Json.Save(Path.Combine(Data, "servers.json"), profiles);
     public string ServerDirectory(ServerProfile profile) {
         if(profile.ExistingDirectory is not {} existing)return Under(Servers,profile.Folder);
@@ -126,6 +130,6 @@ public sealed class Workspace {
         Audit("plugins-applied-stopped-only", profile.Id, new { backup, count = manifest.Count });
     }
     public void Audit(string action, string? id, object detail) {
-        File.AppendAllText(Path.Combine(Data, "actions.jsonl"), Json.Encode(new { at = DateTimeOffset.Now, action, id, detail }) + Environment.NewLine);
+        lock (auditGate) File.AppendAllText(Path.Combine(Data, "actions.jsonl"), Json.Encode(new { at = DateTimeOffset.Now, action, id, detail }) + Environment.NewLine);
     }
 }

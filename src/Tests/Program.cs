@@ -19,6 +19,13 @@ File.Copy(Path.Combine(probeOutput, "Manager.ConsoleProbe.exe"), Path.Combine(so
 Directory.CreateDirectory(Path.Combine(source, "config")); File.WriteAllText(Path.Combine(source, "config", "config.json"), "{\"launcher\":{\"listenPort\":29989}}");
 var before = Directory.GetFiles(source, "*", SearchOption.AllDirectories).ToDictionary(p => p, Hashes.FileSha);
 var p1 = workspace.Import(source); var p2 = workspace.Import(source);
+int FreePort() { var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0); socket.Start(); int port = ((System.Net.IPEndPoint)socket.LocalEndpoint).Port; socket.Stop(); return port; }
+foreach (var p in new[] { p1, p2 }) {
+    string dir = workspace.ServerDirectory(p);
+    File.WriteAllText(Path.Combine(dir, "config", "config.json"), "{\"launcher\":{\"autoStartServers\":[{\"name\":\"fixture\"}]}}");
+    Directory.CreateDirectory(Path.Combine(dir, "config", "TShockAPI"));
+    File.WriteAllText(Path.Combine(dir, "config", "TShockAPI", "config.json"), Json.Encode(new { RestApiPort = FreePort(), ApplicationRestTokens = new Dictionary<string, string> { ["LOCAL_TEST_ONLY"] = "fixture" } }));
+}
 Check("same-source-two-separate-packages", p1.Folder != p2.Folder && workspace.Load().Count == 2);
 Check("server-folders-zero-based-numbered", p1.Folder.StartsWith("0.") && p2.Folder.StartsWith("1."));
 Check("original-package-never-mutated", before.All(p => Hashes.FileSha(p.Key) == p.Value));
@@ -27,7 +34,15 @@ Check("import-contained-root-rejected", Reject(() => workspace.Import(workspace.
 var client = new HostClient(workspace, Path.GetFullPath(args[1])); await client.EnsureStarted();
 Check("named-pipe-host-ping", (await client.Send(new("ping"))).Ok);
 Check("host-no-autostart", (await client.Send(new("list"))).Servers!.All(s => s.Identity == null));
-async Task<Reply> Call(string action, string? id = null, string? value = null, string[]? files = null, ProcessIdentity? identity = null) => await client.Send(new(action, id, value, Files: files, Identity: identity), 30_000);
+async Task<Reply> Call(string action, string? id = null, string? value = null, string[]? files = null, ProcessIdentity? identity = null) {
+    var reply = await client.Send(new(action, id, value, Files: files, Identity: identity), 30_000);
+    if (reply.Ok && action == "start") await WaitQueue();
+    return reply;
+}
+async Task WaitQueue() {
+    for (int i = 0; i < 150; i++) { if ((await client.Send(new("list"))).StartupQueue?.Active != true) return; await Task.Delay(100); }
+    throw new IOException("fixture startup queue timed out");
+}
 var started1 = await Call("start", p1.Id); Check("first-owned-conpty-start", started1.Ok);
 var started2 = await Call("start", p2.Id); Check("second-same-exename-independent-start", started2.Ok);
 Check("duplicate-start-rejected", !(await Call("start", p1.Id)).Ok);
@@ -96,7 +111,7 @@ Check("reference-host-shutdown-after-external-stopped", (await refClient.Send(ne
 Check("explicit-autostart-profile-save", (await client.Send(new("save-profile", p1.Id, Profile: p1 with { AutoStart = true }))).Ok);
 Check("all-original-files-still-unchanged", before.All(p => Hashes.FileSha(p.Key) == p.Value));
 Check("host-shutdown-only-when-no-running-servers", (await Call("shutdown-host")).Ok);
-await Task.Delay(800); await client.EnsureStarted();
+await Task.Delay(800); await client.EnsureStarted(); await WaitQueue();
 var autoStates = (await Call("list")).Servers!;
 var auto = autoStates.Single(s => s.Profile.Id == p1.Id);
 Check("explicit-autostart-only-selected-profile", auto.State == "RUNNING" && auto.Identity?.IsCurrent() == true && autoStates.Single(s => s.Profile.Id == p2.Id).Identity == null);

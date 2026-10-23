@@ -12,7 +12,7 @@ sealed class ConPty : IDisposable {
     IntPtr console;
     public Process Process { get; }
     public ProcessIdentity Identity { get; }
-    public ConPty(string executable, string workingDirectory, string[] arguments, bool headless) {
+    public ConPty(string executable, string workingDirectory, string[] arguments, bool headless, string? worldPipe = null) {
         IntPtr inRead = IntPtr.Zero, inWrite = IntPtr.Zero, outRead = IntPtr.Zero, outWrite = IntPtr.Zero, attr = IntPtr.Zero, env = IntPtr.Zero;
         Process? process = null;
         try {
@@ -26,6 +26,7 @@ sealed class ConPty : IDisposable {
             var start = new STARTUPINFOEX(); start.StartupInfo.cb = Marshal.SizeOf<STARTUPINFOEX>(); start.lpAttributeList = attr;
             var variables = Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>().ToDictionary(e => (string)e.Key, e => (string?)e.Value ?? "", StringComparer.OrdinalIgnoreCase);
             if (headless) variables["UTSL_CONSOLE_MODE"] = "headless";
+            if (worldPipe != null) { variables["UTSL_MANAGER_PIPE"] = worldPipe; variables["UTSL_CONSOLE_MODE"] = "unified"; }
             variables["TERM"] = "xterm-256color";
             string block = string.Join('\0', variables.OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase).Select(e => e.Key + "=" + e.Value)) + "\0\0";
             env = Marshal.StringToHGlobalUni(block);

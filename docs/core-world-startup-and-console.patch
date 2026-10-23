@@ -1,0 +1,192 @@
+diff --git a/src/UnifierTSL/Launcher/AutoStartServers.cs b/src/UnifierTSL/Launcher/AutoStartServers.cs
+--- a/src/UnifierTSL/Launcher/AutoStartServers.cs
++++ b/src/UnifierTSL/Launcher/AutoStartServers.cs
+@@ -268,8 +268,23 @@ namespace UnifierTSL.Launcher
+             }
+ 
+             ServerContext server = new(serverName, IWorldDataProvider.GenerateOrLoadExisting(worldName, size, difficulty, evil, seed));
+-            server.Run([]);
++            UnifierApi.Logger.Info($"[SequentialStartup] BEGIN {serverName}", category: LauncherCategories.Launcher);
++            Thread thread = server.Run([]);
+             UnifiedServerCoordinator.AddServer(server);
++            WaitForStartup(server, thread, TimeSpan.FromMinutes(15));
++            UnifierApi.Logger.Info($"[SequentialStartup] READY {serverName}", category: LauncherCategories.Launcher);
++        }
++
++        // Run() only starts a thread. Netplay.StartServer publishes IsRunning after
++        // the native world load has completed; never overlap the next world load.
++        internal static void WaitForStartup(ServerContext server, Thread thread, TimeSpan timeout) {
++            var elapsed = System.Diagnostics.Stopwatch.StartNew();
++            while (true) {
++                if (!thread.IsAlive) throw new InvalidOperationException($"World '{server.Name}' exited before startup completed; remaining worlds were not started.");
++                if (server.IsRunning) return;
++                if (elapsed.Elapsed >= timeout) throw new TimeoutException($"World '{server.Name}' did not become ready; remaining worlds were not started.");
++                Thread.Sleep(50);
++            }
+         }
+ 
+         private static void AddCandidates(
+diff --git a/src/UnifierTSL/Servers/ServerContext.cs b/src/UnifierTSL/Servers/ServerContext.cs
+--- a/src/UnifierTSL/Servers/ServerContext.cs
++++ b/src/UnifierTSL/Servers/ServerContext.cs
+@@ -1,4 +1,4 @@
+-﻿using Terraria;
++using Terraria;
+ using UnifiedServerProcess;
+ using UnifierTSL.Surface.Adapter.Cli.Server;
+ using UnifierTSL.Surface.Hosting.Server;
+@@ -29,7 +29,8 @@ namespace UnifierTSL.Servers
+         internal int routedConnectionCountAccumulator;
+         internal int playerCountAccumulator;
+         internal volatile bool hasRoutedConnections;
+-        public bool IsRunning { get; private set; }
++        private volatile bool isRunning;
++        public bool IsRunning { get => isRunning; private set => isRunning = value; }
+ 
+         public string? CurrentLogCategory { get; set; }
+         string ILoggerHost.Name => $"Log";
+diff --git a/src/UnifierTSL/Surface/Hosting/Unified/UnifiedConsoleHub.cs b/src/UnifierTSL/Surface/Hosting/Unified/UnifiedConsoleHub.cs
+--- a/src/UnifierTSL/Surface/Hosting/Unified/UnifiedConsoleHub.cs
++++ b/src/UnifierTSL/Surface/Hosting/Unified/UnifiedConsoleHub.cs
+@@ -40,6 +40,9 @@ public sealed class UnifiedConsoleHub
+ 
+         internal readonly List<string> Lines = [];
+         internal readonly Queue<string> Pending = new();
++        internal readonly Queue<ManagerChunk> ManagerOutput = new();
++        internal long ManagerSequence;
++        internal int ManagerCharacters;
+         internal readonly SemaphoreSlim Signal = new(0);
+         internal bool AtLineStart = true;
+         internal bool Closed;
+@@ -60,6 +63,7 @@ public sealed class UnifiedConsoleHub
+             Renumber();
+             active ??= entry;
+         }
++        ManagerConsoleBridge.EnsureStarted();
+         return entry;
+     }
+ 
+@@ -117,6 +121,14 @@ public sealed class UnifiedConsoleHub
+             return;
+         }
+ 
++        if (ManagerConsoleBridge.Enabled) lock (gate) {
++            string raw = (text ?? string.Empty) + (newLine ? Environment.NewLine : string.Empty);
++            entry.ManagerOutput.Enqueue(new ManagerChunk(++entry.ManagerSequence, raw));
++            entry.ManagerCharacters += raw.Length;
++            while (entry.ManagerCharacters > 1_000_000 && entry.ManagerOutput.Count > 1)
++                entry.ManagerCharacters -= entry.ManagerOutput.Dequeue().Text.Length;
++        }
++
+         string? prefixed;
+         lock (gate) {
+             prefixed = Prefix(entry, text ?? string.Empty);
+@@ -200,7 +212,7 @@ public sealed class UnifiedConsoleHub
+                 Diagnostic("[" + entry.Name + "] 控制台输入线程已接入（ReadLine 首次调用）");
+             }
+ 
+-            if (!isActive) {
++            if (!isActive && !ManagerConsoleBridge.Enabled) {
+                 // 非当前世界：不抢输入，等待被切换为当前世界
+                 entry.Signal.Wait(250);
+                 continue;
+@@ -218,6 +230,32 @@ public sealed class UnifiedConsoleHub
+         }
+     }
+ 
++    internal sealed record ManagerChunk(long Sequence, string Text);
++    internal object ReadForManager(string? name, long cursor) {
++        lock (gate) {
++            var entry = entries.Find(e => !e.Closed && e.Name == name);
++            return new {
++                Ok = name is null || entry is not null,
++                Worlds = entries.Where(e => !e.Closed).Select(e => new { e.Index, e.Name, Running = e.Server.IsRunning }).ToArray(),
++                Log = entry is null ? null : new {
++                    Cursor = entry.ManagerSequence,
++                    Truncated = cursor > entry.ManagerSequence || (entry.ManagerOutput.Count > 0 && cursor < entry.ManagerOutput.Peek().Sequence - 1),
++                    Chunks = entry.ManagerOutput.Where(c => c.Sequence > cursor || cursor > entry.ManagerSequence).ToArray()
++                }
++            };
++        }
++    }
++    internal bool SendForManager(string? name, string? command) {
++        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(command) || command.Length > 8192 || command.IndexOfAny(['\r', '\n', '\0']) >= 0) return false;
++        lock (gate) {
++            var entry = entries.Find(e => !e.Closed && e.Name == name && e.Server.IsRunning);
++            if (entry is null || entry.Pending.Count >= 64) return false;
++            entry.Pending.Enqueue(command);
++            entry.Signal.Release();
++            return true;
++        }
++    }
++
+     /// <summary>是否启用了单窗口模式（供启动器输入循环选择提示符/路由）。</summary>
+     public static bool IsEnabled => ServerContext.DefaultConsoleMode == ServerContext.ConsoleMode.Unified;
+ 
+@@ -226,6 +264,9 @@ public sealed class UnifiedConsoleHub
+     /// 返回 true = 本行已被单窗口控制台消费；返回 false = 调用方按旧行为处理（协调器级分发）。
+     /// </summary>
+     public bool TryConsumeLauncherInput(string? rawLine) {
++        // The manager sends world commands through exact-name IPC; the host tab
++        // remains coordinator-scoped (especially its one-shot /off lifecycle).
++        if (ManagerConsoleBridge.Enabled) return false;
+         string line = (rawLine ?? string.Empty).Trim();
+         if (line.Length == 0) {
+             return false;
+@@ -381,4 +422,4 @@ public sealed class UnifiedConsoleHub
+ 
+         UnifiedConsoleOutput.Write(sb.ToString());
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/src/UnifierTSL/Surface/Hosting/Unified/ManagerConsoleBridge.cs b/src/UnifierTSL/Surface/Hosting/Unified/ManagerConsoleBridge.cs
+new file mode 100644
+--- /dev/null
++++ b/src/UnifierTSL/Surface/Hosting/Unified/ManagerConsoleBridge.cs
+@@ -0,0 +1,44 @@
++using System.IO.Pipes;
++using System.Text;
++using System.Text.Json;
++
++namespace UnifierTSL.Surface.Hosting.Unified;
++
++// Opt-in, local current-user IPC. No network listener, no command broadcast.
++internal static class ManagerConsoleBridge {
++    internal static readonly bool Enabled = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("UTSL_MANAGER_PIPE"));
++    private static int started;
++    internal static void EnsureStarted() {
++        if (!Enabled || Interlocked.Exchange(ref started, 1) != 0) return;
++        _ = Task.Run(Serve);
++    }
++    private sealed record Input(string Action, string? World = null, string? Value = null, long Cursor = 0);
++    private static readonly JsonSerializerOptions options = new() { PropertyNameCaseInsensitive = true };
++    private static async Task Serve() {
++        string name = Environment.GetEnvironmentVariable("UTSL_MANAGER_PIPE")!;
++        while (true) {
++            try {
++                using var pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
++                await pipe.WaitForConnectionAsync();
++                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
++                using var reader = new StreamReader(pipe, Encoding.UTF8, false, leaveOpen: true);
++                using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
++                string line = await reader.ReadLineAsync(deadline.Token) ?? "";
++                object reply;
++                if (line.Length > 16_384) reply = new { Ok = false, Message = "Request too large" };
++                else {
++                    var input = JsonSerializer.Deserialize<Input>(line, options) ?? throw new IOException("Empty request");
++                    reply = input.Action switch {
++                        "read" => UnifiedConsoleHub.Instance.ReadForManager(input.World, input.Cursor),
++                        "send" => new { Ok = UnifiedConsoleHub.Instance.SendForManager(input.World, input.Value), Message = "Exact-world input only" },
++                        _ => new { Ok = false, Message = "Unknown action" }
++                    };
++                }
++                await writer.WriteLineAsync(JsonSerializer.Serialize(reply).AsMemory(), deadline.Token);
++            } catch (Exception) {
++                // An absent/disconnected manager must never terminate a game world.
++                await Task.Delay(100);
++            }
++        }
++    }
++}
+\ No newline at end of file

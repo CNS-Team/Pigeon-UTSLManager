@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>WinExe</OutputType><AssemblyName>Pigeon.UTSLManager</AssemblyName><Title>UTSL服务器管理器</Title><Product>UTSL服务器管理器</Product><Description>UTSL多服务器管理器</Description><Version>0.1.0</Version><ApplicationIcon>../../external/MapStudio/assets/branding/MapStudio.ico</ApplicationIcon></PropertyGroup>
+  <PropertyGroup><OutputType>WinExe</OutputType><AssemblyName>Pigeon.UTSLManager</AssemblyName><Title>UTSL服务器管理器</Title><Product>UTSL服务器管理器</Product><Description>UTSL多服务器管理器</Description><Version>0.1.0</Version><ApplicationIcon>../../assets/branding/UTSl-Manager.ico</ApplicationIcon></PropertyGroup>
   <ItemGroup><PackageReference Include="Avalonia" Version="12.1.2"/><PackageReference Include="Avalonia.Desktop" Version="12.1.2"/><PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2"/><PackageReference Include="Lucide.Avalonia" Version="0.2.27"/><PackageReference Include="VtNetCore" Version="1.0.30"/></ItemGroup>
   <ItemGroup><ProjectReference Include="../Core/Core.csproj"/><ProjectReference Include="../../external/MapStudio/src/Studio/Studio.csproj"/></ItemGroup>
+  <ItemGroup><AvaloniaResource Include="../../assets/branding/UTSl-Manager.ico" Link="Assets/Branding/UTSl-Manager.ico"/><AvaloniaResource Include="../../assets/branding/UTSl-Manager.png" Link="Assets/Branding/UTSl-Manager.png"/></ItemGroup>
 </Project>

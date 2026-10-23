@@ -1,10 +1,10 @@
-<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="using:Pigeon.Manager.Desktop" x:Class="Pigeon.Manager.Desktop.MainWindow" Title="UTSL服务器管理器" Width="1510" Height="1000" MinWidth="1220" MinHeight="800" WindowStartupLocation="CenterScreen" WindowDecorations="None" CanResize="True" Icon="avares://UTSL.MapStudio/Assets/MapStudio.ico">
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="using:Pigeon.Manager.Desktop" x:Class="Pigeon.Manager.Desktop.MainWindow" Title="UTSL服务器管理器" Width="1510" Height="1000" MinWidth="1220" MinHeight="800" WindowStartupLocation="CenterScreen" WindowDecorations="None" CanResize="True" Icon="avares://Pigeon.UTSLManager/Assets/Branding/UTSl-Manager.ico">
  <Border BorderBrush="#42434B" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
   <Grid RowDefinitions="42,53,*,30">
    <Border x:Name="TitleBar" Background="#25262C" PointerPressed="DragWindow">
     <Grid ColumnDefinitions="190,*,190" Margin="10,0,0,0">
      <StackPanel x:Name="TrafficControls" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center"><Button Classes="traffic" Background="#FF6058" Click="CloseClick" ToolTip.Tip="关闭窗口，保留后台服务器"/><Button Classes="traffic" Background="#FEBC2E" Click="MinClick" ToolTip.Tip="最小化"/><Button Classes="traffic" Background="#28C840" Click="MaxClick" ToolTip.Tip="最大化 / 还原"/></StackPanel>
-     <StackPanel Grid.Column="1" HorizontalAlignment="Center" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><LucideIcon Kind="Layers" Size="17" Foreground="#9CBAFF"/><TextBlock Text="UTSL 服务器管理器" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
+     <StackPanel Grid.Column="1" HorizontalAlignment="Center" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Image Source="avares://Pigeon.UTSLManager/Assets/Branding/UTSl-Manager.png" Width="20" Height="20"/><TextBlock Text="UTSL 服务器管理器" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
      <StackPanel x:Name="WindowControls" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Stretch" Orientation="Horizontal" Spacing="0">
       <Button x:Name="FullscreenButton" Classes="window-control" Click="FullscreenClick" ToolTip.Tip="全屏 / 退出全屏"><LucideIcon x:Name="FullscreenGlyph" Kind="Maximize" Size="14"/></Button>
       <Button x:Name="MinimizeWindowButton" Classes="window-control" Click="MinClick" ToolTip.Tip="最小化"><LucideIcon Kind="Minus" Size="14"/></Button>
@@ -34,23 +34,33 @@
       </Grid>
      </Border>
      <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
-      <Grid ColumnDefinitions="*,Auto" Margin="25,22,22,17">
-       <StackPanel Spacing="5"><TextBlock x:Name="SelectedTitle" Text="服务器工作区" FontSize="22" FontWeight="SemiBold"/><TextBlock x:Name="SelectedSubtitle" Text="尚未导入服务器" Classes="muted" FontSize="11"/></StackPanel>
-       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Button x:Name="StartButton" Classes="primary" Click="StartClick"><StackPanel Orientation="Horizontal" Spacing="7"><LucideIcon Kind="Play" Size="15"/><TextBlock Text="启动"/></StackPanel></Button><Button x:Name="StopButton" Click="StopClick"><StackPanel Orientation="Horizontal" Spacing="7"><LucideIcon Kind="Square" Size="14"/><TextBlock Text="停止"/></StackPanel></Button><Button x:Name="RestartButton" Classes="icon" Click="RestartClick" ToolTip.Tip="优雅停止后重新启动"><LucideIcon Kind="RotateCw" Size="16"/></Button><Button x:Name="ProfileButton" Classes="icon" Click="ProfileClick" ToolTip.Tip="启动设置"><LucideIcon Kind="Settings2" Size="16"/></Button><Button x:Name="ServerFolderButton" Classes="icon" Click="ServerFolderClick" ToolTip.Tip="打开此服务端目录"><LucideIcon Kind="FolderOpen" Size="16"/></Button></StackPanel>
+      <Grid x:Name="ServerHeader" ColumnDefinitions="*,Auto" ColumnSpacing="18" Margin="24,20,22,16">
+       <StackPanel Spacing="5" VerticalAlignment="Center"><TextBlock x:Name="SelectedTitle" Text="服务器工作区" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock x:Name="SelectedSubtitle" Text="尚未导入服务器" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis"/></StackPanel>
+       <StackPanel x:Name="ServerToolbar" Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+        <Border x:Name="SelectedActionsGroup" Classes="toolbar-group">
+         <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button x:Name="StartButton" Classes="toolbar primary" MinWidth="76" Click="StartClick" ToolTip.Tip="启动当前服务器，等待全部世界就绪"><StackPanel Orientation="Horizontal" Spacing="6"><LucideIcon Kind="Play" Size="15"/><TextBlock Text="启动"/></StackPanel></Button>
+          <Button x:Name="StopButton" Classes="toolbar" MinWidth="76" Click="StopClick" ToolTip.Tip="REST 保存并验证 World saved → /off 一次 → 20 秒后复核身份，仅终止单 PID"><StackPanel Orientation="Horizontal" Spacing="6"><LucideIcon Kind="Square" Size="14"/><TextBlock Text="停止"/></StackPanel></Button>
+          <Button x:Name="RestartButton" Classes="toolbar icon" Click="RestartClick" ToolTip.Tip="先验证保存再停止；20 秒后复核身份，仅终止单 PID；停止成功才重启"><LucideIcon Kind="RotateCw" Size="16"/></Button>
+         </StackPanel>
+        </Border>
+        <Border x:Name="BulkActionsGroup" Classes="toolbar-group">
+         <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button x:Name="StartAllButton" Classes="toolbar" MinWidth="104" Click="StartAllClick" ToolTip.Tip="按编号顺序启动；前一服全部世界就绪后才启动下一服，失败暂停队列"><StackPanel Orientation="Horizontal" Spacing="6"><LucideIcon Kind="Play" Size="15"/><TextBlock Text="全部启动"/></StackPanel></Button>
+          <Button x:Name="StopAllButton" Classes="toolbar danger" MinWidth="104" Click="StopAllClick" ToolTip.Tip="确认后取消启动队列，由后台逐服保存并停止；进度显示在状态栏"><StackPanel Orientation="Horizontal" Spacing="6"><LucideIcon Kind="Square" Size="14"/><TextBlock Text="全部停止"/></StackPanel></Button>
+         </StackPanel>
+        </Border>
+        <Border x:Name="SettingsActionsGroup" Classes="toolbar-group">
+         <StackPanel Orientation="Horizontal" Spacing="4"><Button x:Name="ProfileButton" Classes="toolbar icon" Click="ProfileClick" ToolTip.Tip="启动设置"><LucideIcon Kind="Settings2" Size="16"/></Button><Button x:Name="ServerFolderButton" Classes="toolbar icon" Click="ServerFolderClick" ToolTip.Tip="打开此服务端目录"><LucideIcon Kind="FolderOpen" Size="16"/></Button></StackPanel>
+        </Border>
+       </StackPanel>
       </Grid>
       <Border Grid.Row="1" Margin="24,0,22,14" BorderBrush="#3A3B44" BorderThickness="0,0,0,1" Padding="0,0,0,12">
-       <Grid ColumnDefinitions="*,Auto"><StackPanel Orientation="Horizontal" Spacing="22"><TextBlock x:Name="PidLabel" Text="PID —" Classes="muted"/><TextBlock x:Name="MemoryLabel" Text="内存 —" Classes="muted"/><TextBlock x:Name="UptimeLabel" Text="运行 —" Classes="muted"/></StackPanel><CheckBox x:Name="SplitToggle" Grid.Column="1" Content="双控制台" IsCheckedChanged="SplitChanged" FontSize="11"/></Grid>
+       <Grid x:Name="ServerDetails" ColumnDefinitions="*,Auto" ColumnSpacing="16"><StackPanel x:Name="ServerMetrics" Orientation="Horizontal" Spacing="18" VerticalAlignment="Center"><TextBlock x:Name="PidLabel" Text="PID —" Classes="muted"/><TextBlock x:Name="MemoryLabel" Text="内存 —" Classes="muted"/><TextBlock x:Name="UptimeLabel" Text="运行 —" Classes="muted"/></StackPanel><StackPanel x:Name="WorldControls" Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"><Button x:Name="WorldTab1" Classes="world-tab" Content="1" Tag="0" Click="WorldTabClick" ToolTip.Tip="世界 1"/><Button x:Name="WorldTab2" Classes="world-tab" Content="2" Tag="1" Click="WorldTabClick" ToolTip.Tip="世界 2"/><Button x:Name="WorldTab3" Classes="world-tab" Content="3" Tag="2" Click="WorldTabClick" ToolTip.Tip="世界 3"/><Button x:Name="HostConsoleButton" Classes="world-tab" Width="54" Content="宿主" Tag="-1" Click="WorldTabClick"/><CheckBox x:Name="TripleToggle" Content="显示三个" IsCheckedChanged="WorldLayoutChanged" FontSize="11" VerticalAlignment="Center" Margin="5,0,0,0"/></StackPanel></Grid>
       </Border>
       <Grid Grid.Row="2" RowDefinitions="*,Auto" Margin="24,0,22,18">
-       <Grid x:Name="Consoles" ColumnDefinitions="*,0" ColumnSpacing="12">
-        <Border BorderBrush="#3A3B43" BorderThickness="1" CornerRadius="6" Background="#111215" ClipToBounds="True"><Grid RowDefinitions="37,*,Auto">
-         <Border Background="#26272E" BorderBrush="#3A3B43" BorderThickness="0,0,0,1"><Grid ColumnDefinitions="*,Auto" Margin="13,0"><StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><LucideIcon Kind="Terminal" Size="14" Foreground="#A5B7E5"/><TextBlock x:Name="ConsoleTitle" Text="控制台" FontSize="11"/></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="3"><Button Classes="icon" Click="CopyConsoleClick" ToolTip.Tip="复制控制台文本" Background="Transparent" BorderThickness="0"><LucideIcon Kind="Copy" Size="14"/></Button><Button Classes="icon" Click="ExportLogClick" ToolTip.Tip="打开此服务器日志" Background="Transparent" BorderThickness="0"><LucideIcon Kind="FileText" Size="14"/></Button></StackPanel></Grid></Border>
-         <Grid Grid.Row="1"><local:TerminalView x:Name="PrimaryTerminal"/><StackPanel x:Name="EmptyConsole" Spacing="13" HorizontalAlignment="Center" VerticalAlignment="Center"><LucideIcon Kind="Terminal" Size="30" Foreground="#6E7183"/><TextBlock x:Name="EmptyText" Text="没有所属控制台" Foreground="#8F93A3" HorizontalAlignment="Center"/><Button x:Name="EmptyImportButton" Content="导入服务端包" Click="ImportClick" HorizontalAlignment="Center"/></StackPanel></Grid>
-         <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="11,8,11,11"><TextBox x:Name="CommandInput" PlaceholderText="控制台命令" KeyDown="CommandKeyDown" FontFamily="Cascadia Mono,Microsoft YaHei UI"/><Button x:Name="SendButton" Grid.Column="1" Classes="icon" Click="SendClick" ToolTip.Tip="发送至当前服务器"><LucideIcon Kind="ArrowUp" Size="17"/></Button></Grid>
-        </Grid></Border>
-        <Border x:Name="SecondaryPane" Grid.Column="1" IsVisible="False" BorderBrush="#3A3B43" BorderThickness="1" CornerRadius="6" Background="#111215" ClipToBounds="True"><Grid RowDefinitions="Auto,*,Auto"><ComboBox x:Name="CompareServer" SelectionChanged="CompareChanged" Margin="8"/><local:TerminalView x:Name="SecondaryTerminal" Grid.Row="1"/><Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="7" Margin="9"><TextBox x:Name="CompareInput" PlaceholderText="另一服的命令" KeyDown="CompareKeyDown"/><Button Grid.Column="1" Classes="icon" Click="CompareSendClick" ToolTip.Tip="发送至右侧服务器"><LucideIcon Kind="ArrowUp" Size="16"/></Button></Grid></Grid></Border>
-       </Grid>
-       <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,10,0,0"><TextBlock x:Name="StateHint" Text="未自动启动任何服务器" FontSize="11" Classes="muted"/><Button x:Name="ForceButton" Grid.Column="1" Content="强制停止此 PID…" IsVisible="False" Click="ForceClick" Foreground="#EDAE98" MinHeight="24" Padding="8,3" FontSize="11"/></Grid>
+       <Grid x:Name="Consoles" ColumnSpacing="10"/>
+       <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,10,0,0"><TextBlock x:Name="StateHint" Text="未自动启动任何服务器" FontSize="11" Classes="muted" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/><Button x:Name="ForceButton" Grid.Column="1" Content="强制停止此 PID…" IsVisible="False" Click="ForceClick" Foreground="#EDAE98" MinHeight="24" Padding="8,3" FontSize="11"/></Grid>
       </Grid>
      </Grid>
     </Grid>

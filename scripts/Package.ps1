@@ -25,7 +25,9 @@ $dotnet=Split-Path (Get-Command dotnet).Source
 $sdk=(& dotnet --list-sdks|Select-String '^10\.'|Select-Object -Last 1).ToString().Split(' ')[0]
 Add-Type -Path (Join-Path $dotnet "sdk/$sdk/Microsoft.NET.HostModel.dll")
 $pack=Get-ChildItem (Join-Path $dotnet 'packs/Microsoft.NETCore.App.Host.win-x64') -Directory|Where-Object Name -like '10.*'|Sort-Object {[version]$_.Name}|Select-Object -Last 1
-[Microsoft.NET.HostModel.AppHost.HostWriter]::CreateAppHost((Join-Path $pack.FullName 'runtimes/win-x64/native/apphost.exe'),(Join-Path $destination 'UTSl-Manager.exe'),'App/manager/Pigeon.UTSLManager.dll',$true,(Join-Path $destination 'App/manager/Pigeon.UTSLManager.dll'),$false,$false,$null)
+$managerAssembly=Join-Path $destination 'App/manager/Pigeon.UTSLManager.dll'
+# Copy the manager assembly's Win32 resources, including its ApplicationIcon, to the root apphost.
+[Microsoft.NET.HostModel.AppHost.HostWriter]::CreateAppHost((Join-Path $pack.FullName 'runtimes/win-x64/native/apphost.exe'),(Join-Path $destination 'UTSl-Manager.exe'),'App/manager/Pigeon.UTSLManager.dll',$true,$managerAssembly,$false,$false,$null)
 $facts=@(Get-ChildItem -LiteralPath (Join-Path $destination 'App') -Recurse -File|ForEach-Object{[ordered]@{path=[IO.Path]::GetRelativePath($destination,$_.FullName);bytes=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash}})+@([ordered]@{path='UTSl-Manager.exe';bytes=(Get-Item -LiteralPath (Join-Path $destination 'UTSl-Manager.exe')).Length;sha256=(Get-FileHash -LiteralPath (Join-Path $destination 'UTSl-Manager.exe')).Hash})
 [ordered]@{at=(Get-Date -Format o);version='0.1.0';source=(git -C $root rev-parse HEAD 2>$null);mapSource=(git -C $map rev-parse HEAD);scope='local package; no servers imported or started';files=@($facts)}|ConvertTo-Json -Depth 6|Set-Content (Join-Path $destination 'App/package-manifest.json') -Encoding utf8
 Get-Item -LiteralPath (Join-Path $destination 'UTSl-Manager.exe')|Select-Object FullName,Length
