@@ -34,6 +34,8 @@ public sealed partial class MainWindow : Window {
         StartConsoleCollector();
         Opened += async (_, _) => {
             try { await client.EnsureStarted(); await RefreshState(); polling.Tick += async (_, _) => await RefreshState(); polling.Start();
+                int libraryTest = Array.IndexOf(Program.Args, "--library-ui-smoke");
+                if (libraryTest >= 0 && Program.Args.Length > libraryTest + 3) { await LibrarySmoke(Program.Args[libraryTest+1], Program.Args[libraryTest+2], Program.Args[libraryTest+3]); return; }
                 int index = Array.IndexOf(Program.Args, "--ui-smoke"); if (index >= 0 && Program.Args.Length > index+1) await Smoke(Program.Args[index+1]);
             } catch (Exception e) { HostStatus.Text = "后台未连接"; HostDot.Fill = Brush.Parse("#EEA68F"); StatusText.Text = e.Message; }
         };

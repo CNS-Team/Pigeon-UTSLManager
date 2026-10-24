@@ -2,6 +2,8 @@ namespace Pigeon.Manager;
 
 public sealed record PluginArtifact(string FileName, string Name, string Version, long Bytes, string Sha256);
 
+public sealed record PluginLibraryState(PluginArtifact[] Current, PluginArtifact[] Archived, string Directory, string ArchiveDirectory);
+
 public sealed record RuntimeSelection(bool Enabled, PluginArtifact[] Plugins, string? EngineRevision = null);
 
 // Directory/Executable always identify the launch location. Disabled selections

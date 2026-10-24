@@ -85,6 +85,12 @@ sealed class ServerManager(Workspace workspace) {
         if (profile.Id.Length == 0 || profile.Id is "." or ".." || profile.Id.EndsWith('.')
             || profile.Id.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_' or '.'))) return false;
         string readable = workspace.RuntimeRoot(profile);
+        // Native full-path detection survives a missing marker or selection change.
+        // Detection only denies duplicates; it never confers process ownership.
+        if (string.Equals(Path.GetFullPath(Path.Combine(readable, profile.Executable)), executable, StringComparison.OrdinalIgnoreCase)) return true;
+        string slots = Path.Combine(workspace.Root, "Core", "Runtime", ".manager-slots", profile.Id);
+        if (new[] { "previous", "pending" }.Any(slot => string.Equals(
+            Path.GetFullPath(Path.Combine(slots, slot, profile.Executable)), executable, StringComparison.OrdinalIgnoreCase))) return true;
         string[] readableParts = Path.GetRelativePath(readable, executable).Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
         if (readableParts.Length >= 2 && readableParts[0].StartsWith("run-", StringComparison.Ordinal)
             && int.TryParse(readableParts[0][4..], out int run) && run > 0
@@ -156,11 +162,36 @@ sealed class ServerManager(Workspace workspace) {
         if (request.Action == "plugins") return new(true, Plugins: workspace.Plugins());
         if (request.Action == "engine-list") { lock (filesGate) return new(true, Engines: new EngineLibrary(workspace).Catalog()); }
         if (request.Action == "shared-library-list") { lock (filesGate) return new(true, Artifacts: new SharedRuntime(workspace).Catalog()); }
+        if (request.Action == "shared-library-state") {
+            lock (filesGate) { var library = new SharedRuntime(workspace); return new(true, Library: library.LibraryState()); }
+        }
+        if (request.Action == "shared-library-organize") {
+            lock (filesGate) {
+                var state = new SharedRuntime(workspace).OrganizeLibrary();
+                workspace.Audit("plugin-library-organized", null, new { current = state.Current.Length, archived = state.Archived.Length });
+                return new(true, "主目录仅保留每个插件的当前版本；历史版本已归档，可按 SHA256 回退", Library: state, Artifacts: state.Current.Concat(state.Archived).ToArray());
+            }
+        }
+        if (request.Action == "shared-library-restore") {
+            lock (filesGate) {
+                var artifact = Json.Decode<PluginArtifact>(request.Value ?? "");
+                var state = new SharedRuntime(workspace).SetLibraryCurrent(artifact);
+                workspace.Audit("plugin-library-restored", null, artifact);
+                return new(true, "已回退主库当前版本；运行中的沙箱与已保存的精确选择保持不变", Library: state, Artifacts: state.Current.Concat(state.Archived).ToArray());
+            }
+        }
+        if (request.Action == "shared-library-cancel-import") {
+            lock (filesGate) {
+                var state = new SharedRuntime(workspace).CancelLibraryImport();
+                workspace.Audit("plugin-library-incomplete-import-cancelled", null, new { });
+                return new(true, "已取消尚未提交的导入并保留失败记录；主库和各服选择未改变", Library: state);
+            }
+        }
         if (request.Action == "shared-library-import") {
             lock (filesGate) {
                 var library = new SharedRuntime(workspace);
                 library.Import(request.Files ?? []);
-                return new(true, "已导入总插件库；旧版本及运行中的插件保持锁定", Artifacts: library.Catalog());
+                return new(true, "已导入最新版主库；旧版本已归档，运行中版本保持锁定", Artifacts: library.Catalog(), Library: library.LibraryState());
             }
         }
         if (request.Action == "import") { lock (filesGate) { var p = workspace.Import(request.Value ?? ""); return new(true, "服务端包已复制，原目录未修改", Servers: Snapshot(), Path: workspace.ServerDirectory(p)); } }
@@ -257,6 +288,19 @@ sealed class ServerManager(Workspace workspace) {
                     lock (filesGate) {
                         var launch = new SharedRuntime(workspace).Prepare(profile);
                         return new(true, "已准备并校验运行目录；未创建服务端进程", Path: launch.Directory);
+                    }
+                case "runtime-compact":
+                    RequireStopped(profile, session);
+                    lock (filesGate) {
+                        var library = new SharedRuntime(workspace);
+                        if (!library.NamedSandboxesEnabled(profile)) {
+                            if (Directory.Exists(workspace.RuntimeRoot(profile))) {
+                                var plan = library.PlanLegacyRuntimeMigration(profile);
+                                library.MigrateNamedSandboxes(profile, plan.PlanSha256);
+                            } else library.EnableNamedSandboxes(profile);
+                        }
+                        workspace.Audit("runtime-named-retention-enabled", profile.Id, new { root = workspace.RuntimeRoot(profile), retainedPrevious = 1 });
+                        return new(true, "已启用按 Server 目录命名的沙箱；最多保留一个上一版，未启动服务端", Path: workspace.RuntimeRoot(profile));
                     }
                 default: return new(false, "未知操作");
             }

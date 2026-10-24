@@ -272,10 +272,14 @@ public sealed partial class SharedRuntime {
                     // entry assembly explicitly references that selected module.
                     || plugins.Any(exporter => ownerReferences.Contains(exporter.Artifact.Name)
                         && p.Equals(Path.GetDirectoryName(exporter.Destination)!.Replace('\\', '/') + "/lib/" + name + ".dll", StringComparison.OrdinalIgnoreCase)));
-                // This exact stock support payload was successfully loaded by both old cores.
+                // This exact stock support payload was loaded with each verified
+                // complete provider combination; ValidateDynamicProviders runs first.
                 // Drawing APIs remain UNVERIFIED; this is not permission to omit pinned files.
                 if (!resolved && VerifiedOptionalSupportReference(file, name)
-                    && plugins.Any(p => p.Artifact.Sha256 == "5A443304C68C97F2ABAD251DA1688EF5EB62D1F36B515582DEC19E21A5F31794")
+                    && plugins.Any(p => p.Artifact.Sha256 is
+                        "5A443304C68C97F2ABAD251DA1688EF5EB62D1F36B515582DEC19E21A5F31794" or
+                        "045B13ED39F4F7D0D8E891E1EDC523E09AD58E43DEB4E15BD476FB552A8A030E" or
+                        "781A83BC49508CF568528303759E2990426443C56CC5665647BB0590C249A48F")
                     && plugins.Any(p => p.Artifact.Sha256 == "1553B4B3BFD332A79148B53EEDCBB8B8E8EC6301AE51F921B8E4D3666BBF67F3")) continue;
                 if (!resolved) throw new IOException("MISSING_MODULE_SUPPORT: " + file.Path + " -> " + name);
             }

@@ -12,6 +12,10 @@ catch (IOException) { return; }
 using var singleInstance = hostLock;
 try {
     var manager = new ServerManager(workspace);
+    // Native reconciliation is restartable and retains every SHA-pinned revision.
+    // A failed migration is recorded, without preventing existing servers from booting.
+    try { var library = new SharedRuntime(workspace); if (library.ManagedLibraryEnabled) library.OrganizeLibrary(); }
+    catch (Exception e) { workspace.Audit("plugin-library-reconcile-blocked", null, new { error = e.Message }); }
     workspace.Audit("host-start", null, new { pid = Environment.ProcessId, transport = "CurrentUserOnly named pipe" });
     // The queue runs independently, so IPC and consoles stay responsive during loading.
     var autostart = await manager.Handle(new("autostart"));

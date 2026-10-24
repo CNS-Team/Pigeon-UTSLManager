@@ -13,9 +13,10 @@ using Avalonia.Platform.Storage;
 namespace Pigeon.Manager.Desktop;
 
 public sealed partial class MainWindow {
-    sealed class ArtifactChoice(PluginArtifact artifact, bool available, Action<ArtifactChoice, bool> changed) : INotifyPropertyChanged {
+    sealed class ArtifactChoice(PluginArtifact artifact, bool available, bool archived, Action<ArtifactChoice, bool> changed) : INotifyPropertyChanged {
         public PluginArtifact Artifact { get; } = artifact;
         public bool Available { get; } = available;
+        public bool Archived { get; } = archived;
         bool selected, editable;
         public bool Selected { get => selected; set { if (selected == value) return; selected = value; Notify(); changed(this, value); } }
         public bool Editable { get => editable; set { if (editable == value) return; editable = value; Notify(); } }
@@ -24,6 +25,7 @@ public sealed partial class MainWindow {
         void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new(name));
     }
     PluginArtifact[] libraryArtifacts = [];
+    HashSet<string> currentLibraryKeys = new(StringComparer.OrdinalIgnoreCase);
     EngineArtifact[] libraryEngines = [];
     ArtifactChoice[] artifactChoices = [];
     readonly Dictionary<string, PluginArtifact> runtimePlugins = new(StringComparer.OrdinalIgnoreCase);
@@ -53,7 +55,7 @@ public sealed partial class MainWindow {
             var info = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch };
             var title = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 12 };
             title.Children.Add(new TextBlock { Text = row.Artifact.Name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
-            var version = new TextBlock { Text = row.Artifact.Version, Foreground = Brush.Parse("#B4C4F2"), FontSize = 11 };
+            var version = new TextBlock { Text = row.Artifact.Version + (row.Archived ? " · 历史" : " · 当前"), Foreground = Brush.Parse("#B4C4F2"), FontSize = 11 };
             Grid.SetColumn(version, 1); title.Children.Add(version); info.Children.Add(title);
             info.Children.Add(new TextBlock { Text = row.Artifact.FileName + "  ·  " + BytesLabel(row.Artifact.Bytes), Foreground = Brush.Parse("#989CAB"), FontSize = 10, TextTrimming = TextTrimming.CharacterEllipsis });
             info.Children.Add(new TextBlock { Text = "SHA256 " + row.Artifact.Sha256, Foreground = Brush.Parse("#8F94A5"), FontFamily = FontFamily.Parse("Cascadia Mono,Consolas"), FontSize = 10, TextTrimming = TextTrimming.CharacterEllipsis });
@@ -99,8 +101,11 @@ public sealed partial class MainWindow {
         EngineVersion.IsEnabled = writable;
         SaveRuntimeButton.IsEnabled = writable && !SelectionConflicts && !MissingSelectedArtifact && !MissingSelectedEngine;
         PreviewRuntimeButton.IsEnabled = writable && !runtimeDirty && RuntimeEnabled.IsChecked == true && !SelectionConflicts && !MissingSelectedArtifact && !MissingSelectedEngine;
+        CompactRuntimeButton.IsEnabled = writable && !runtimeDirty && RuntimeEnabled.IsChecked == true;
         ImportCurrentPluginsButton.IsEnabled = ImportCurrentEngineButton.IsEnabled = writable;
         ImportSharedPluginsButton.IsEnabled = RefreshLibraryButton.IsEnabled = idle;
+        OrganizeLibraryButton.IsEnabled = RestoreLibraryButton.IsEnabled = idle;
+        CancelLibraryImportButton.IsEnabled = idle;
         AddLegacyPluginsButton.IsEnabled = idle;
         ApplyLegacyPluginsButton.IsEnabled = writable && PluginList.SelectedItems?.Count > 0;
         if (lastArtifactWritable != writable) {
@@ -128,15 +133,16 @@ public sealed partial class MainWindow {
         var available = libraryArtifacts.ToDictionary(ArtifactKey, StringComparer.OrdinalIgnoreCase);
         artifactChoices = libraryArtifacts.Concat(runtimePlugins.Where(p => !available.ContainsKey(p.Key)).Select(p => p.Value))
             .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Version, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Sha256, StringComparer.Ordinal)
-            .Select(p => { var row = new ArtifactChoice(p, available.ContainsKey(ArtifactKey(p)), ArtifactSelected); row.Select(runtimePlugins.ContainsKey(ArtifactKey(p))); return row; }).ToArray();
+            .Select(p => { var row = new ArtifactChoice(p, available.ContainsKey(ArtifactKey(p)), !currentLibraryKeys.Contains(ArtifactKey(p)), ArtifactSelected); row.Select(runtimePlugins.ContainsKey(ArtifactKey(p))); return row; }).ToArray();
         lastArtifactWritable = null; FilterArtifacts(); UpdateLibraryControls();
     }
     void FilterArtifacts() {
         string filter = LibrarySearch.Text?.Trim() ?? "";
-        var rows = artifactChoices.Where(row => filter.Length == 0 || new[] { row.Artifact.Name, row.Artifact.FileName, row.Artifact.Version, row.Artifact.Sha256 }
-            .Any(value => value.Contains(filter, StringComparison.OrdinalIgnoreCase))).ToArray();
+        var rows = artifactChoices.Where(row => (ShowArchivedPlugins.IsChecked == true || !row.Archived)
+            && (filter.Length == 0 || new[] { row.Artifact.Name, row.Artifact.FileName, row.Artifact.Version, row.Artifact.Sha256 }
+            .Any(value => value.Contains(filter, StringComparison.OrdinalIgnoreCase)))).ToArray();
         ArtifactList.ItemsSource = rows;
-        ArtifactCount.Text = filter.Length == 0 ? $"{libraryArtifacts.Length} 个版本" : $"显示 {rows.Length} / {artifactChoices.Length} 个版本";
+        ArtifactCount.Text = $"{currentLibraryKeys.Count} 当前 / {libraryArtifacts.Length - currentLibraryKeys.Count} 历史";
         LibraryEmptyHint.IsVisible = rows.Length == 0;
         LibraryEmptyHint.Text = filter.Length == 0 ? "总库暂无插件，请收录 DLL 或导入目标服现有插件" : "没有匹配的插件版本";
     }
@@ -170,11 +176,11 @@ public sealed partial class MainWindow {
         int generation = ++catalogGeneration;
         libraryLoading = true; UpdateLibraryControls(); LibraryMessage("正在载入总插件库与核心版本…");
         try {
-            var catalog = LibraryRequest(new("shared-library-list"));
+            var catalog = LibraryRequest(new("shared-library-state"));
             var engines = LibraryRequest(new("engine-list"));
             await Task.WhenAll(catalog, engines);
             if (generation != catalogGeneration) return;
-            libraryArtifacts = (await catalog).Artifacts ?? throw new IOException("总插件库响应缺少 Artifacts");
+            ApplyLibraryState((await catalog).Library ?? throw new IOException("后台尚不支持最新版/历史归档，请更新后台"));
             libraryEngines = (await engines).Engines ?? throw new IOException("核心库响应缺少 Engines");
             RebuildEngines(); RenderArtifacts();
             if (discardDraft || !runtimeLoaded || !runtimeDirty || runtimeTargetId != PluginTargetId) await LoadRuntimeTarget();
@@ -197,7 +203,7 @@ public sealed partial class MainWindow {
             var reply = await LibraryRequest(new("runtime-selection", id));
             if (generation != targetGeneration || PluginTargetId != id) return;
             ApplyRuntimeSelection(reply.RuntimeSelection ?? throw new IOException("后台响应缺少 RuntimeSelection"));
-            LibraryMessage("已载入目标服配置；收录新版本会保留总库中的旧版本");
+            LibraryMessage("已载入目标服配置；历史版本可读取回退，运行中的精确版本不会自动改变");
         } catch (Exception e) { if (generation == targetGeneration) LibraryMessage("配置载入失败：" + e.Message, true); }
         finally { if (generation == targetGeneration) { runtimeLoading = false; UpdateLibraryControls(); } }
     }
@@ -239,19 +245,64 @@ public sealed partial class MainWindow {
         await LoadRuntimeTarget();
     }
     void LibrarySearchChanged(object? sender, TextChangedEventArgs e) { if (libraryInitialized) FilterArtifacts(); }
+    void ShowArchivedPluginsChanged(object? sender, RoutedEventArgs e) { if (libraryInitialized) FilterArtifacts(); }
+    void ApplyLibraryState(PluginLibraryState state) {
+        libraryArtifacts = state.Current.Concat(state.Archived).ToArray();
+        currentLibraryKeys = state.Current.Select(ArtifactKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+    async void OrganizeLibraryClick(object? sender, RoutedEventArgs e) {
+        if (!await BeginLibraryOperation("正在整理主库并归档历史版本…", false)) return;
+        try {
+            var reply = await LibraryRequest(new("shared-library-organize"), 600_000);
+            ApplyLibraryState(reply.Library ?? throw new IOException("归档响应缺少库状态"));
+            RenderArtifacts(); LibraryMessage(reply.Message);
+        } catch (Exception ex) { LibraryMessage("归档失败：" + ex.Message, true); }
+        finally { EndLibraryOperation(); }
+    }
+    async void RestoreLibraryClick(object? sender, RoutedEventArgs e) {
+        if (ArtifactList.SelectedItem is not ArtifactChoice choice) { LibraryMessage("请先高亮选择要恢复的版本", true); return; }
+        if (!await BeginLibraryOperation("正在恢复主库当前版本…", false)) return;
+        try {
+            var reply = await LibraryRequest(new("shared-library-restore", Value: Json.Encode(choice.Artifact)), 600_000);
+            ApplyLibraryState(reply.Library ?? throw new IOException("回退响应缺少库状态"));
+            RenderArtifacts(); LibraryMessage(reply.Message);
+        } catch (Exception ex) { LibraryMessage("回退失败：" + ex.Message, true); }
+        finally { EndLibraryOperation(); }
+    }
+    async void CancelLibraryImportClick(object? sender, RoutedEventArgs e) {
+        if (!await BeginLibraryOperation("正在核查并取消尚未提交的导入…", false)) return;
+        try {
+            var reply = await LibraryRequest(new("shared-library-cancel-import"), 600_000);
+            ApplyLibraryState(reply.Library ?? throw new IOException("取消导入响应缺少库状态"));
+            RenderArtifacts(); LibraryMessage(reply.Message);
+        } catch (Exception ex) { LibraryMessage("取消导入失败：" + ex.Message, true); }
+        finally { EndLibraryOperation(); }
+    }
+    async void CompactRuntimeClick(object? sender, RoutedEventArgs e) {
+        string? id = PluginTargetId;
+        if (id is null || !CompactRuntimeButton.IsEnabled) return;
+        if (!await Confirm("整理运行沙箱", "停止服将改用 Server 同名沙箱，保留一个上一版。旧代次经完整核验后清理；存档、配置和账号数据保留。是否继续？")) return;
+        if (PluginTargetId != id || !await BeginLibraryOperation("正在校验并整理命名沙箱…", true)) return;
+        try {
+            var reply = await LibraryRequest(new("runtime-compact", id), 600_000);
+            RuntimePreviewPath.Text = reply.Path; RuntimePreviewPath.IsVisible = true;
+            LibraryMessage(reply.Message);
+        } catch (Exception ex) { LibraryMessage("沙箱整理被阻断：" + ex.Message, true); }
+        finally { EndLibraryOperation(); }
+    }
     void RuntimeEnabledChanged(object? sender, RoutedEventArgs e) { if (libraryInitialized && !applyingRuntime && RuntimeWritable) MarkRuntimeDirty(); }
     void EngineVersionChanged(object? sender, SelectionChangedEventArgs e) {
         if (!libraryInitialized || applyingRuntime || !RuntimeWritable) return;
         runtimeEngineRevision = (EngineVersion.SelectedItem as ComboBoxItem)?.Tag as string; MarkRuntimeDirty();
     }
     async void ImportSharedPluginsClick(object? sender, RoutedEventArgs e) {
-        if (!await BeginLibraryOperation("选择待收录的 DLL；新版本将追加到总库…", false)) return;
+        if (!await BeginLibraryOperation("选择待收录的 DLL；最新版进入主库，旧版自动归档…", false)) return;
         try {
             var files = await StorageProvider.OpenFilePickerAsync(new() { Title = "收录插件版本（保留旧版本）", AllowMultiple = true, FileTypeFilter = [new FilePickerFileType("插件程序集") { Patterns = ["*.dll"] }] });
             var paths = files.Select(f => f.TryGetLocalPath()).OfType<string>().ToArray();
             if (paths.Length == 0) { LibraryMessage("已取消收录，配置保持不变"); return; }
             var reply = await LibraryRequest(new("shared-library-import", Files: paths), 600_000);
-            libraryArtifacts = reply.Artifacts ?? throw new IOException("收录响应缺少 Artifacts");
+            ApplyLibraryState(reply.Library ?? throw new IOException("收录响应缺少库状态"));
             RenderArtifacts(); LibraryMessage(reply.Message);
         } catch (Exception ex) { LibraryMessage("收录失败：" + ex.Message, true); }
         finally { EndLibraryOperation(); }
@@ -274,6 +325,7 @@ public sealed partial class MainWindow {
         try {
             var reply = await LibraryRequest(new("runtime-import-current", id), 600_000);
             libraryArtifacts = reply.Artifacts ?? throw new IOException("导入响应缺少 Artifacts");
+            ApplyLibraryState((await LibraryRequest(new("shared-library-state"))).Library ?? throw new IOException("后台缺少库状态"));
             ApplyRuntimeSelection(reply.RuntimeSelection ?? throw new IOException("导入响应缺少 RuntimeSelection"));
             LibraryMessage(reply.Message);
         } catch (Exception ex) { LibraryMessage("原服插件收录失败：" + ex.Message, true); }

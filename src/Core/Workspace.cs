@@ -110,15 +110,21 @@ public sealed class Workspace {
         return new(identity.Name ?? file.Name, file.Name, identity.Version?.ToString() ?? "?", file.Length, Hashes.FileSha(path));
     }
     public void AddPlugins(IEnumerable<string> sources) {
-        var inputs = sources.Select(p => (Path: Path.GetFullPath(p), Info: Describe(p))).ToArray();
-        foreach (var (source, info) in inputs) {
-            string dest = Under(Library, info.FileName);
-            if (File.Exists(dest)) {
-                if (Hashes.FileSha(dest) == info.Sha256) continue;
-                throw new IOException("插件库已有不同版本，请先改名保存旧件：" + info.FileName);
+        var library = new SharedRuntime(this);
+        if (!library.ManagedLibraryEnabled) {
+            var inputs = sources.Select(p => (Path: Path.GetFullPath(p), Info: Describe(p))).ToArray();
+            foreach (var (source, info) in inputs) {
+                string dest = Under(Library, info.FileName);
+                if (File.Exists(dest)) {
+                    if (Hashes.FileSha(dest) == info.Sha256) continue;
+                    throw new IOException("插件库已有不同版本，请先改名保存旧件：" + info.FileName);
+                }
+                File.Copy(source, dest, false); Audit("plugin-import", null, info);
             }
-            File.Copy(source, dest, false); Audit("plugin-import", null, info);
+            return;
         }
+        var artifacts = new SharedRuntime(this).Import(sources.ToArray());
+        Audit("plugin-import-latest-with-archive", null, artifacts);
     }
     public void ApplyPlugins(ServerProfile profile, string[] fileNames) {
         if (fileNames.Length == 0) throw new IOException("未选择插件");

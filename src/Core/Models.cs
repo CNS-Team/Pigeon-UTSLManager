@@ -39,7 +39,7 @@ public sealed record LogPage(long Cursor, bool Truncated, LogChunk[] Chunks);
 public sealed record Request(string Action, string? Id = null, string? Value = null, long Cursor = 0, ServerProfile? Profile = null, string[]? Files = null, ProcessIdentity? Identity = null, string? World = null);
 public sealed record WorldConsoleInfo(int Index, string Name, bool Running);
 public sealed record StartupQueueState(bool Active, string? CurrentId = null, string Message = "", string[]? Order = null);
-public sealed record Reply(bool Ok, string Message = "", ServerState[]? Servers = null, LogPage? Log = null, PluginInfo[]? Plugins = null, string? Path = null, StartupQueueState? StartupQueue = null, WorldConsoleInfo[]? Worlds = null, StartupQueueState? StopQueue = null, PluginArtifact[]? Artifacts = null, RuntimeSelection? RuntimeSelection = null, EngineArtifact[]? Engines = null);
+public sealed record Reply(bool Ok, string Message = "", ServerState[]? Servers = null, LogPage? Log = null, PluginInfo[]? Plugins = null, string? Path = null, StartupQueueState? StartupQueue = null, WorldConsoleInfo[]? Worlds = null, StartupQueueState? StopQueue = null, PluginArtifact[]? Artifacts = null, RuntimeSelection? RuntimeSelection = null, EngineArtifact[]? Engines = null, PluginLibraryState? Library = null);
 public static class Hashes {
     public static string FileSha(string path) { using var stream = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(stream)); }
     public static string RootId(string path) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(path).TrimEnd('\\').ToUpperInvariant())))[..24];

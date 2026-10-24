@@ -52,27 +52,48 @@ public sealed partial class SharedRuntime {
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content.ToString())));
     }
     sealed record VerifiedProvider(string Name, string OwnerSha256, string SupportFingerprint);
-    static readonly VerifiedProvider[] VerifiedProviders = [
+    static readonly VerifiedProvider[] OriginalProviders = [
         new("TShockAPI", "5A443304C68C97F2ABAD251DA1688EF5EB62D1F36B515582DEC19E21A5F31794", "BF65DB0922BAF0EF1141181525F93D5ED48889D3E3CA3961BE4C105E73376284"),
         new("CustomPlayer", "1553B4B3BFD332A79148B53EEDCBB8B8E8EC6301AE51F921B8E4D3666BBF67F3", "16A5E82F7179D8D4AE4AB54121EABF3E58C8156BF19089CB4933D0802B445A79")
     ];
-    // Filled only with complete initial code-tree fingerprints from independent
-    // old-loader processes. A new build or dependency set needs a fresh validation.
-    static readonly HashSet<string> VerifiedProviderCode = new(StringComparer.Ordinal) {
-        "8671696C08B0567DDD60F1798D7E0D0305F8820DA1D56394449E0DC6E01CA606",
-        "A0D5C4D653E701A06FBE6A73D4412D0D52277E17750E69B7D990D9435B592F14"
-    };
+    sealed record VerifiedProviderCombination(string CodeFingerprint, VerifiedProvider[] Providers);
+    // Each complete code/owner/support tuple is verified through the actual
+    // ModuleAssemblyLoader in an independent process. Never cross-pair a provider
+    // revision with a different engine unless that exact tuple was independently
+    // verified. Unknown code, owner and support combinations remain rejected.
+    static readonly VerifiedProviderCombination[] VerifiedProviderCombinations = [
+        new("8671696C08B0567DDD60F1798D7E0D0305F8820DA1D56394449E0DC6E01CA606", OriginalProviders),
+        new("A0D5C4D653E701A06FBE6A73D4412D0D52277E17750E69B7D990D9435B592F14", OriginalProviders),
+        new("447AFF38BE391386125290A130597502792EFCE983EA5EEDF97ECD0215BD7ED7", [
+            new("TShockAPI", "045B13ED39F4F7D0D8E891E1EDC523E09AD58E43DEB4E15BD476FB552A8A030E", "419FA9BFE466C697022B259AB6DBF1F8CC29063FDF27F9FE81415B3A61DE331F"),
+            OriginalProviders[1]
+        ]),
+        new("2F23014A107D07DD3DEFBC84AA4B45FF3EFEE22F5A60FEB907F0D49E299A31E1", [
+            new("TShockAPI", "781A83BC49508CF568528303759E2990426443C56CC5665647BB0590C249A48F", "02F6FC2ADAC769F1841B2BE806E6A5532E50781940978FAD72B939467E5F1F8B"),
+            OriginalProviders[1]
+        ]),
+        // Common TShockAPI binary: actual DB47 loader/provider checks and native
+        // 100-check matrix passed offline on 2026-10-24; complete Prepare is tested
+        // against this exact tuple, including private physical support copies.
+        new("2F23014A107D07DD3DEFBC84AA4B45FF3EFEE22F5A60FEB907F0D49E299A31E1", [
+            new("TShockAPI", "045B13ED39F4F7D0D8E891E1EDC523E09AD58E43DEB4E15BD476FB552A8A030E", "419FA9BFE466C697022B259AB6DBF1F8CC29063FDF27F9FE81415B3A61DE331F"),
+            OriginalProviders[1]
+        ])
+    ];
     static void ValidateDynamicProviders(PreparedPlugin[] plugins, SelectionDocument selection, List<CodeFile> code) {
         var dynamicPlugins = plugins.Where(p => p.Metadata.DynamicDependencies).ToArray();
         if (dynamicPlugins.Length == 0) return;
-        if (dynamicPlugins.Length != VerifiedProviders.Length || VerifiedProviders.Any(v => !dynamicPlugins.Any(p => p.Artifact.Name == v.Name && p.Artifact.Sha256 == v.OwnerSha256)))
-            throw new IOException("BLOCKED_OPEN_DYNAMIC_MODULE_DEPENDENCIES: 仅验证过 TShockAPI + CustomPlayer 的精确 provider 组合");
         string codeFingerprint = PayloadFingerprint(code.Select(f => (f.Path, f.Bytes, f.Sha256)));
+        var combination = VerifiedProviderCombinations.SingleOrDefault(c => c.CodeFingerprint == codeFingerprint
+            && dynamicPlugins.Length == c.Providers.Length
+            && c.Providers.All(v => dynamicPlugins.Any(p => p.Artifact.Name == v.Name && p.Artifact.Sha256 == v.OwnerSha256)));
+        if (combination is null)
+            throw new IOException("BLOCKED_OPEN_DYNAMIC_MODULE_DEPENDENCIES: code=" + codeFingerprint + "；仅验证过 TShockAPI + CustomPlayer 的精确完整组合");
         foreach (var plugin in dynamicPlugins) {
-            var verified = VerifiedProviders.SingleOrDefault(p => p.Name == plugin.Artifact.Name && p.OwnerSha256 == plugin.Artifact.Sha256);
+            var verified = combination.Providers.SingleOrDefault(p => p.Name == plugin.Artifact.Name && p.OwnerSha256 == plugin.Artifact.Sha256);
             var support = (selection.Support ?? []).Where(f => f.Module == plugin.Metadata.Directory && f.OwnerSha256 == plugin.Artifact.Sha256).ToArray();
             string fingerprint = PayloadFingerprint(support.Select(f => (f.Path, f.Bytes, f.Sha256)));
-            if (verified is null || !VerifiedProviderCode.Contains(codeFingerprint) || fingerprint != verified.SupportFingerprint)
+            if (verified is null || fingerprint != verified.SupportFingerprint)
                 throw new IOException("BLOCKED_OPEN_DYNAMIC_MODULE_DEPENDENCIES: " + plugin.Artifact.Name + "; code=" + codeFingerprint + "; owner=" + plugin.Artifact.Sha256 + "; support=" + fingerprint + "；仅放行独立旧 loader 实核过的完整组合");
         }
     }
